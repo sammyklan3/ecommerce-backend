@@ -11,3 +11,6 @@
 1. Now run the application
    - `nodemon app.js`
 + The Project will be up and running in no time and you should see the URL on the console or terminal
+
+## How to collaborate on the project
+> Contact me using email at (sammyklane@gmail.com)
