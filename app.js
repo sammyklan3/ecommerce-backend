@@ -1,5 +1,6 @@
 const express = require("express");
 const cors = require("cors");
+const jwt = require("jsonwebtoken");
 const mysql = require("mysql2");
 const bodyParser = require("body-parser");
 const port = 3000;
@@ -15,6 +16,9 @@ app.use((req, res, next) => {
     console.log(`Request received at ${new Date()}`);
     next();
 });
+
+// Setting a secure secret key
+const secretKey = "2/19978d,8£!q5D`2$g#";
 
 // Function to generate a unique ID
 // Function to generate a random alphanumeric ID with a specific length
@@ -78,6 +82,9 @@ app.post("/signup", (req, res) => {
                 // If no user is found
                 const sql = "INSERT INTO users (UserID, username, password) VALUES (?, ?, ?)";
 
+                // Signing the userData object with JWT
+                const token = jwt.sign({username, password}, secretKey, {expiresIn: "1h"});
+
                 const newId = generateRandomAlphanumericId(9);
 
                 console.log(newId);
@@ -90,7 +97,7 @@ app.post("/signup", (req, res) => {
                         return;
                     }
 
-                    res.status(200).json({ success: true, message: "Account successfully created" });
+                    res.status(200).json({ success: true, message: "Account successfully created", token });
                 });
             }
         });
@@ -115,6 +122,9 @@ app.post("/login", (req, res) => {
         // Execute logic
         const sql = "SELECT * FROM users WHERE Username = ? AND Password = ?";
 
+        // Signing the userData object with JWT
+        const token = jwt.sign({username, password}, secretKey, {expiresIn: "10s"});
+
         db.query(sql, [username, password], (error, results) => {
             if (error) {
                 // Handle db error
@@ -124,7 +134,7 @@ app.post("/login", (req, res) => {
             }
             // If a user already exists
             if (results.length > 0) {
-                res.status(200).json({ success: true, message: "Successfully logged in" });
+                res.status(200).json({ success: true, message: "Successfully logged in", token });
             } else {
                 res.status(400).json({ success: false, error: "Username or Password is incorrect" });
             }
