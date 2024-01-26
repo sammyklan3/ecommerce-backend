@@ -8,3 +8,6 @@
 
 1. Install the necessary Node JS modules
    - `npm install`
+1. Now run the application
+   - `nodemon app.js`
++ The Project will be up and running in no time and you should see the URL on the console or terminal
