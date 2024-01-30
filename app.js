@@ -1,11 +1,16 @@
 const express = require("express");
 const cors = require("cors");
+const bcrypt = require("bcrypt");
 const jwt = require("jsonwebtoken");
 const mysql = require("mysql2");
 const bodyParser = require("body-parser");
+require('dotenv').config(); // For handling environment variables
+
 const port = 3000;
 
 const app = express();
+
+const saltRounds = 10;
 
 app.use(cors());
 // Use bodyParser middleware to parse incoming JSON data
@@ -49,98 +54,105 @@ const db = mysql.createPool({
 // Test the database connection
 db.getConnection((err, connection) => {
     if (err) {
-      console.error('Database connection failed: ', err.message);
+        console.error('Database connection failed: ', err.message);
     } else {
-      console.log('Database connection successful!');
-      connection.release(); // Release the connection when done
+        console.log('Database connection successful!');
+        connection.release(); // Release the connection when done
     }
-  });
+});
 
+// Middleware to verify JWT token
+function verifyToken(req, res, next) {
+    const token = req.headers.authorization.split(" ")[1];
 
-// Signup route
-app.post("/signup", (req, res) => {
-    // Accessing the username
-    const { username, password } = req.body;
+    if (!token) {
+        return res.status(403).json({ message: 'Token not provided' });
+    }
 
-    if (!username && !password) {
-        res.status(400).json({ success: false, message: "Username and password are required" });
-        return;
-    } else {
-
-        db.query("SELECT * FROM users WHERE username = ?", [username], (err, results) => {
-            if (err) {
-                // Handle db error
-                console.log("Database error: " + err);
-                res.status(500).json({ success: false, error: "Internal Server Error" });
-                return;
+    jwt.verify(token, secretKey, (err, decoded) => {
+        if (err) {
+            console.error('Token verification error:', err);
+            // Handle specific error cases if needed
+            if (err.name === 'TokenExpiredError') {
+                return res.status(401).json({ message: 'Token expired' });
             }
+            return res.status(401).json({ message: 'Invalid token' });
+        }
 
-            // If a user already exists
-            if (results.length > 0) {
-                res.status(400).json({ success: false, error: "This user already exists" });
-            } else {
-                // If no user is found
-                const sql = "INSERT INTO users (UserID, username, password) VALUES (?, ?, ?)";
-
-                // Signing the userData object with JWT
-                const token = jwt.sign({username, password}, secretKey, {expiresIn: "1h"});
-
-                const newId = generateRandomAlphanumericId(9);
-
-                console.log(newId);
-
-                db.query(sql, [newId, username, password], (err, results) => {
-                    if (err) {
-                        // Handle db error during insert
-                        console.log("Database error: " + err);
-                        res.status(500).json({ success: false, error: "Internal Server Error" });
-                        return;
-                    }
-
-                    res.status(200).json({ success: true, message: "Account successfully created", token });
-                });
-            }
-        });
-    };
+        console.log('Decoded token:', decoded);
+        req.user = decoded;
+        next();
+    });
 
 
+}
+
+// Function for getting current user
+app.get("/currentUser", verifyToken, (req, res) => {
+    const { username } = req.user;
+    res.json({ user: username });
 });
 
 
-// Login route
-app.post("/login", (req, res) => {
+// Signup route with password hashing
+app.post("/signup", async (req, res) => {
     const { username, password } = req.body;
 
-    console.log('Received data:', { username, password });
+    if (!username || !password) {
+        return res.status(400).json({ success: false, message: "Username and password are required" });
+    }
 
-    // Check if username and password are empty
-    if (!username && !password) {
-        res.status(400).json({ success: false, error: "Username and password are required" });
-        return;
+    try {
+        const hashedPassword = await bcrypt.hash(password, saltRounds);
 
-    } else {
-        // Execute logic
-        const sql = "SELECT * FROM users WHERE Username = ? AND Password = ?";
+        const [existingUser] = await db.promise().query("SELECT * FROM users WHERE username = ?", [username]);
 
-        // Signing the userData object with JWT
-        const token = jwt.sign({username, password}, secretKey, {expiresIn: "10s"});
+        if (existingUser.length > 0) {
+            return res.status(400).json({ success: false, error: "This user already exists" });
+        }
 
-        db.query(sql, [username, password], (error, results) => {
-            if (error) {
-                // Handle db error
-                console.log("Database error: " + error);
-                res.status(500).json({ success: false, error: "Internal Server Error" });
-                return;
-            }
-            // If a user already exists
-            if (results.length > 0) {
-                res.status(200).json({ success: true, message: "Successfully logged in", token });
-            } else {
-                res.status(400).json({ success: false, error: "Username or Password is incorrect" });
-            }
-        });
-    };
+        const newId = generateRandomAlphanumericId(9);
+        const sql = "INSERT INTO users (UserID, username, password) VALUES (?, ?, ?)";
 
+        await db.promise().execute(sql, [newId, username, hashedPassword]);
+
+        const token = jwt.sign({ username }, secretKey, { expiresIn: "1h" });
+
+        res.status(200).json({ success: true, message: "Account successfully created", token });
+    } catch (error) {
+        console.error("Database error: " + error);
+        res.status(500).json({ success: false, error: "Internal Server Error" });
+    }
+});
+
+// Login route with password hashing
+app.post("/login", async (req, res) => {
+    const { username, password } = req.body;
+
+    if (!username || !password) {
+        return res.status(400).json({ success: false, error: "Username and password are required" });
+    }
+
+    try {
+        const [user] = await db.promise().query("SELECT * FROM users WHERE username = ?", [username]);
+
+        if (user.length === 0) {
+            return res.status(400).json({ success: false, error: "Username or Password is incorrect" });
+        }
+
+        const match = await bcrypt.compare(password, user[0].Password);
+
+        if (!match) {
+            return res.status(400).json({ success: false, error: "Username or Password is incorrect" });
+        }
+
+        const token = jwt.sign({ username }, secretKey, { expiresIn: "1h" });
+
+        res.status(200).json({ success: true, message: "Successfully logged in", token });
+    } catch (error) {
+        console.error("Database error: " + error);
+        res.status(500).json({ success: false, error: "Internal Server Error" });
+    }
 });
 
 // Product Creation route
@@ -191,7 +203,7 @@ app.post("/createProduct", function (req, res) {
 });
 
 // Search Users
-app.get("/product/:id", function(req, res) {
+app.get("/product/:id", function (req, res) {
     const productID = req.params.id;
 
     const sql = "SELECT * FROM products WHERE ProductID = ?";
@@ -202,9 +214,9 @@ app.get("/product/:id", function(req, res) {
             console.log("Database error: " + err);
             res.status(500).json({ success: false, error: "Internal Server Error" });
             return;
-        } 
-        
-        if(result < 1){
+        }
+
+        if (result < 1) {
             res.status(404).json({ success: false, error: "This product is not available" });
         } else {
             res.status(200).json(result);
