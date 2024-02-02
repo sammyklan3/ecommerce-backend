@@ -89,14 +89,16 @@ function verifyToken(req, res, next) {
 
 // Function for getting current user
 app.get("/currentUser", verifyToken, (req, res) => {
-    const { username } = req.user;
-    res.json({ user: username });
+    const { username, role } = req.user;
+    res.json({ user: username, role });
 });
 
 
 // Signup route with password hashing
 app.post("/signup", async (req, res) => {
     const { username, password } = req.body;
+
+    const UserType = "user";
 
     if (!username || !password) {
         return res.status(400).json({ success: false, message: "Username and password are required" });
@@ -112,9 +114,9 @@ app.post("/signup", async (req, res) => {
         }
 
         const newId = generateRandomAlphanumericId(9);
-        const sql = "INSERT INTO users (UserID, username, password) VALUES (?, ?, ?)";
+        const sql = "INSERT INTO users (UserID, username, password, UserType) VALUES (?, ?, ?, ?)";
 
-        await db.promise().execute(sql, [newId, username, hashedPassword]);
+        await db.promise().execute(sql, [newId, username, hashedPassword, UserType]);
 
         const token = jwt.sign({ username }, secretKey, { expiresIn: "1h" });
 
@@ -139,6 +141,7 @@ app.post("/login", async (req, res) => {
         if (user.length === 0) {
             return res.status(400).json({ success: false, error: "Username or Password is incorrect" });
         }
+        const role = user[0].UserType;
 
         const match = await bcrypt.compare(password, user[0].Password);
 
@@ -146,7 +149,7 @@ app.post("/login", async (req, res) => {
             return res.status(400).json({ success: false, error: "Username or Password is incorrect" });
         }
 
-        const token = jwt.sign({ username }, secretKey, { expiresIn: "1h" });
+        const token = jwt.sign({ username, role }, secretKey, { expiresIn: "1h" });
 
         res.status(200).json({ success: true, message: "Successfully logged in", token });
     } catch (error) {
@@ -198,8 +201,6 @@ app.post("/createProduct", function (req, res) {
         })
 
     }
-
-
 });
 
 // Search Users
@@ -280,6 +281,31 @@ app.post("/addManufacturer", function (req, res) {
         })
     }
 });
+
+// Get Orders 
+app.get("/orders", verifyToken, (req, res) => {
+    const { role } = req.user;
+    
+    if (role !== "admin") {
+        res.status(400).json({ success: false, error: "You must be an admin" });
+    } else {
+        const sql = "SELECT * FROM orders";
+
+        // Logic execution
+        db.query(sql, (err, result) => {
+            if (err) {
+                // Handle db error during insert
+                console.log("Database error: " + err);
+                res.status(500).json({ success: false, error: "Internal Server Error" });
+                return;
+            } else {
+                res.status(200).json({ success: true, message: "Orders successfully queried.", result });
+            }
+        });
+    }
+
+
+})
 
 
 // Handling 404 errors
