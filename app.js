@@ -159,49 +159,57 @@ app.post("/login", async (req, res) => {
 });
 
 // Product Creation route
-app.post("/createProduct", function (req, res) {
-    const { name, description, price, stockquantity, model } = req.body;
+app.post("/createProducts", function (req, res) {
+    const products = req.body;
 
-    // Check if the body is empty
-    if (!name && !description && !price && !stockquantity && !model) {
-        res.status(301).json({ success: false, error: "All fields are required" });
-    } else {
-        db.query("SELECT Name FROM products WHERE Name = ?", [name], (err, result) => {
+    // Check if the array is empty
+    if (!products) {
+        res.status(301).json({ success: false, error: "No products provided" });
+        return;
+    }
+
+    if (Array.isArray(products)) {
+        // Array of products
+        const values = products.map(product => {
+            const { name, description, price, stockquantity, model, category } = product;
+            const newId = generateRandomAlphanumericId(9);
+            const currentDate = new Date().toISOString();
+
+            return [newId, name, description, price, stockquantity, category, model, currentDate];
+        });
+
+        const sql = "INSERT INTO products (ProductID, Name, Description, Price, StockQuantity, Category, Model, date_uploaded) VALUES ?";
+
+        db.query(sql, [values], (err, results) => {
             if (err) {
-                // Handle db error
                 console.log("Database error: " + err);
                 res.status(500).json({ success: false, error: "Internal Server Error" });
                 return;
             }
 
-            if (result.length > 0) {
-                res.status(400).json({ success: false, error: "This product already exists" });
-            } else {
-                // Logic execution
-                const sql = "INSERT INTO products (ProductID, Name, Description, Price, StockQuantity, Model, date_uploaded) VALUES (?,?,?,?,?,?,?)";
+            res.status(200).json({ success: true, message: "Products successfully created" });
+        });
+    } else {
+        // Single product
+        const { name, description, price, stockquantity, model, category } = products;
+        const newId = generateRandomAlphanumericId(9);
+        const currentDate = new Date().toISOString();
 
-                // Create a new Date object
-                var currentDate = new Date();
+        const sql = "INSERT INTO products (ProductID, Name, Description, Price, StockQuantity, Category, Model, date_uploaded) VALUES (?,?,?,?,?,?,?,?)";
 
-                // Get the current date and time
-                var currentDateTime = currentDate.toISOString();
-
-                const newId = generateRandomAlphanumericId(9);
-
-                db.query(sql, [newId, name, description, price, stockquantity, model, currentDateTime], (err, results) => {
-                    if (err) {
-                        // Handle db error during insert
-                        console.log("Database error: " + err);
-                        res.status(500).json({ success: false, error: "Internal Server Error" });
-                        return;
-                    }
-                    res.status(200).json({ success: true, message: "Product successfully created" });
-                })
+        db.query(sql, [newId, name, description, price, stockquantity, category, model, currentDate], (err, results) => {
+            if (err) {
+                console.log("Database error: " + err);
+                res.status(500).json({ success: false, error: "Internal Server Error" });
+                return;
             }
-        })
 
+            res.status(200).json({ success: true, message: "Product successfully created" });
+        });
     }
 });
+
+
 
 // Search Users
 app.get("/product/:id", function (req, res) {
