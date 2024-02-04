@@ -2,6 +2,9 @@ const express = require("express");
 const cors = require("cors");
 const bcrypt = require("bcrypt");
 const jwt = require("jsonwebtoken");
+const fileUpload = require("express-fileupload");
+const fs = require("fs");
+const path = require("path");
 const mysql = require("mysql2");
 const bodyParser = require("body-parser");
 require('dotenv').config(); // For handling environment variables
@@ -16,11 +19,17 @@ app.use(cors());
 // Use bodyParser middleware to parse incoming JSON data
 app.use(bodyParser.json());
 
+// Use express-fileupload middleware
+app.use(fileUpload());
+
 // Middleware to log incoming requests
 app.use((req, res, next) => {
     console.log(`Request received at ${new Date()}`);
     next();
 });
+
+// Serve static files from the public directory
+app.use('/assets', express.static(path.join(__dirname, 'assets')));
 
 // Setting a secure secret key
 const secretKey = "2/19978d,8£!q5D`2$g#";
@@ -66,7 +75,7 @@ function verifyToken(req, res, next) {
     const token = req.headers.authorization.split(" ")[1];
 
     if (!token) {
-        return res.status(403).json({ message: 'Token not provided' });
+        return res.status(403).json({ error: 'Token not provided' });
     }
 
     jwt.verify(token, secretKey, (err, decoded) => {
@@ -74,9 +83,9 @@ function verifyToken(req, res, next) {
             console.error('Token verification error:', err);
             // Handle specific error cases if needed
             if (err.name === 'TokenExpiredError') {
-                return res.status(401).json({ message: 'Token expired' });
+                return res.status(401).json({ error: 'Token expired' });
             }
-            return res.status(401).json({ message: 'Invalid token' });
+            return res.status(401).json({ error: 'Invalid token' });
         }
 
         console.log('Decoded token:', decoded);
@@ -158,57 +167,81 @@ app.post("/login", async (req, res) => {
     }
 });
 
-// Product Creation route
 app.post("/createProducts", function (req, res) {
-    const products = req.body;
+    let products = req.body;
+    const images = req.files && req.files.image;
+
+    // Convert to array if it's a single product
+    if (!Array.isArray(products)) {
+        products = [products];
+    }
 
     // Check if the array is empty
-    if (!products) {
+    if (!products.length) {
         res.status(301).json({ success: false, error: "No products provided" });
         return;
     }
 
-    if (Array.isArray(products)) {
-        // Array of products
-        const values = products.map(product => {
-            const { name, description, price, stockquantity, model, category } = product;
-            const newId = generateRandomAlphanumericId(9);
-            const currentDate = new Date().toISOString();
+    // Check if images are provided
+    if (!images || (Array.isArray(images) && images.length === 0)) {
+        res.status(301).json({ success: false, error: "No images provided" });
+        return;
+    }
 
-            return [newId, name, description, price, stockquantity, category, model, currentDate];
-        });
+    // Function to validate image files
+    const isValidImage = (file) => {
+        const allowedExtensions = ["jpg", "jpeg", "png", "gif"];
+        const maxSizeInBytes = 5 * 1024 * 1024; // 5MB
 
-        const sql = "INSERT INTO products (ProductID, Name, Description, Price, StockQuantity, Category, Model, date_uploaded) VALUES ?";
+        const fileExtension = file.name.split(".").pop();
+        return allowedExtensions.includes(fileExtension) && file.size <= maxSizeInBytes;
+    };
 
-        db.query(sql, [values], (err, results) => {
-            if (err) {
-                console.log("Database error: " + err);
-                res.status(500).json({ success: false, error: "Internal Server Error" });
-                return;
-            }
 
-            res.status(200).json({ success: true, message: "Products successfully created" });
-        });
-    } else {
-        // Single product
-        const { name, description, price, stockquantity, model, category } = products;
+
+    // Ensure images is always an array
+    const imageArray = Array.isArray(images) ? images : [images];
+
+    // Check if the uploaded files are images and of appropriate size
+    if (!imageArray.every(isValidImage)) {
+        res.status(301).json({ success: false, error: "Invalid or oversized images provided" });
+        return;
+    }
+
+    // Array of product values
+    const values = products.map((product, index) => {
+        const { name, description, price, stockquantity, model, category } = product;
         const newId = generateRandomAlphanumericId(9);
         const currentDate = new Date().toISOString();
+        const image = imageArray[index];
 
-        const sql = "INSERT INTO products (ProductID, Name, Description, Price, StockQuantity, Category, Model, date_uploaded) VALUES (?,?,?,?,?,?,?,?)";
-
-        db.query(sql, [newId, name, description, price, stockquantity, category, model, currentDate], (err, results) => {
+        // Move the image to the /assets/products folder
+        const imagePath = path.join(__dirname, "/assets/products", newId + "_" + image.name);
+        image.mv(imagePath, (err) => {
             if (err) {
-                console.log("Database error: " + err);
-                res.status(500).json({ success: false, error: "Internal Server Error" });
-                return;
+                console.log("Error moving image: " + err);
             }
-
-            res.status(200).json({ success: true, message: "Product successfully created" });
         });
-    }
-});
 
+        // Store relative path in the database
+        const relativeImagePath = `products/${newId}_${image.name}`;
+
+        return [newId, name, description, price, stockquantity, category, model, currentDate, relativeImagePath];
+    });
+
+
+    const sql = "INSERT INTO products (ProductID, Name, Description, Price, StockQuantity, Category, Model, date_uploaded, Images) VALUES ?";
+
+    db.query(sql, [values], (err, results) => {
+        if (err) {
+            console.log("Database error: " + err);
+            res.status(500).json({ success: false, error: "Internal Server Error" });
+            return;
+        }
+
+        res.status(200).json({ success: true, message: "Products successfully created" });
+    });
+});
 
 
 // Search Users
@@ -233,9 +266,10 @@ app.get("/product/:id", function (req, res) {
     });
 });
 
+
 // Get Products
 app.get("/products", function (req, res) {
-    const sql = "SELECT * FROM products"
+    const sql = "SELECT * FROM products ORDER BY date_uploaded";
 
     db.query(sql, (err, result) => {
         if (err) {
@@ -244,10 +278,33 @@ app.get("/products", function (req, res) {
             res.status(500).json({ success: false, error: "Internal Server Error" });
             return;
         } else {
-            res.status(200).json(result);
+            // Dynamically generate full image paths
+            const productsWithFullImagePath = result.map((product) => {
+                const { Images: relativeImagePath, ...otherProductDetails } = product;
+                const fullImagePath = `http://localhost:3000/assets/${relativeImagePath}`;
+                return { ...otherProductDetails, Images: fullImagePath };
+            });
+
+            res.status(200).json(productsWithFullImagePath);
         }
-    })
-})
+    });
+});
+
+// Delete products
+app.delete("/products/:id", (req, res) => {
+    const productId = req.params.id;
+
+    const query = 'DELETE FROM products WHERE id = ?';
+
+    db.query(query, [productId], (err, results) => {
+        if (err) {
+            console.error('Error deleting product:', err);
+            res.status(500).json({ error: 'Internal Server Error' });
+        } else {
+            res.status(204).send(); // 204 No Content - successful deletion
+        }
+    });
+});
 
 // Manufacturer information addition route
 app.post("/addManufacturer", function (req, res) {
@@ -293,7 +350,7 @@ app.post("/addManufacturer", function (req, res) {
 // Get Orders 
 app.get("/orders", verifyToken, (req, res) => {
     const { role } = req.user;
-    
+
     if (role !== "admin") {
         res.status(400).json({ success: false, error: "You must be an admin" });
     } else {
