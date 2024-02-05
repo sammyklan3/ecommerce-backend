@@ -244,27 +244,43 @@ app.post("/createProducts", function (req, res) {
 });
 
 
-// Search Users
-app.get("/product/:id", function (req, res) {
-    const productID = req.params.id;
+// Search Products
+app.get("/product/:ProductID", function (req, res) {
+    const productID = req.params.ProductID; // Use consistent naming
+
+    console.log("Requested Product ID:", productID);
+
+    if (!productID) {
+        console.log("Product ID not provided");
+        res.status(400).json({ success: false, error: "Product ID not provided" });
+        return;
+    }
 
     const sql = "SELECT * FROM products WHERE ProductID = ?";
 
     db.query(sql, [productID], (err, result) => {
         if (err) {
             // Handle db error
-            console.log("Database error: " + err);
+            console.log("Database error:", err);
             res.status(500).json({ success: false, error: "Internal Server Error" });
             return;
         }
 
-        if (result < 1) {
-            res.status(404).json({ success: false, error: "This product is not available" });
+        if (result.length < 1) {
+            res.status(404).json({ success: false, error: "Product not found" });
         } else {
-            res.status(200).json(result);
+            // Dynamically generate full image paths
+            const productsWithFullImagePath = result.map((product) => {
+                const { Images: relativeImagePath, ...otherProductDetails } = product;
+                const fullImagePath = `http://localhost:3000/assets/${relativeImagePath}`;
+                return { ...otherProductDetails, Images: fullImagePath };
+            });
+
+            res.status(200).json(productsWithFullImagePath);
         }
     });
 });
+
 
 
 // Get Products
