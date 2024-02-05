@@ -256,6 +256,9 @@ app.get("/product/:ProductID", function (req, res) {
         return;
     }
 
+    // Get the host address dynamically
+    const host = req.get('host');
+
     const sql = "SELECT * FROM products WHERE ProductID = ?";
 
     db.query(sql, [productID], (err, result) => {
@@ -272,7 +275,7 @@ app.get("/product/:ProductID", function (req, res) {
             // Dynamically generate full image paths
             const productsWithFullImagePath = result.map((product) => {
                 const { Images: relativeImagePath, ...otherProductDetails } = product;
-                const fullImagePath = `http://localhost:3000/assets/${relativeImagePath}`;
+                const fullImagePath = `http://${host}/assets/${relativeImagePath}`;
                 return { ...otherProductDetails, Images: fullImagePath };
             });
 
@@ -287,6 +290,9 @@ app.get("/product/:ProductID", function (req, res) {
 app.get("/products", function (req, res) {
     const sql = "SELECT * FROM products ORDER BY date_uploaded";
 
+    // Get the host address dynamically
+    const host = req.get('host');
+
     db.query(sql, (err, result) => {
         if (err) {
             // Handle db error
@@ -297,7 +303,7 @@ app.get("/products", function (req, res) {
             // Dynamically generate full image paths
             const productsWithFullImagePath = result.map((product) => {
                 const { Images: relativeImagePath, ...otherProductDetails } = product;
-                const fullImagePath = `http://localhost:3000/assets/${relativeImagePath}`;
+                const fullImagePath = `http://${host}/assets/${relativeImagePath}`;
                 return { ...otherProductDetails, Images: fullImagePath };
             });
 
