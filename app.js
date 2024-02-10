@@ -1,8 +1,8 @@
 const express = require("express");
 const cors = require("cors");
 const bcrypt = require("bcrypt");
-const jwt = require("jsonwebtoken");
-const fileUpload = require("express-fileupload");
+const session = require("express-session");
+const multer = require("multer");
 const fs = require("fs");
 const path = require("path");
 const mysql = require("mysql2");
@@ -19,20 +19,25 @@ app.use(cors());
 // Use bodyParser middleware to parse incoming JSON data
 app.use(bodyParser.json());
 
-// Use express-fileupload middleware
-app.use(fileUpload());
-
 // Middleware to log incoming requests
 app.use((req, res, next) => {
     console.log(`Request received at ${new Date()}`);
     next();
 });
 
-// Serve static files from the public directory
+// Serve static files from the assets directory
 app.use('/assets', express.static(path.join(__dirname, 'assets')));
 
-// Setting a secure secret key
-const secretKey = "2/19978d,8£!q5D`2$g#";
+// Session middleware setup
+app.use(session({
+    secret: process.env.SESSION_SECRET || "2/19978d,8£!q5D`2$g#",
+    resave: false,
+    saveUninitialized: false,
+    cookie: {
+        secure: true,
+        maxAge: 1000 * 60 * 60 * 24 * 30
+    }
+}));
 
 // Function to generate a unique ID
 // Function to generate a random alphanumeric ID with a specific length
@@ -48,6 +53,26 @@ function generateRandomAlphanumericId(length) {
     return result;
 }
 
+const storage = multer.diskStorage({
+    destination: function (req, file, cb) {
+        cb(null, path.join(__dirname, 'assets/products'));
+    },
+    filename: function (req, file, cb) {
+        const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+        cb(null, uniqueSuffix + path.extname(file.originalname));
+    }
+});
+
+const upload = multer({
+    storage: storage, // Specify the storage configuration
+    fileFilter: (req, file, cb) => {
+        // Check if file is an image
+        if (!file.originalname.match(/\.(jpg|jpeg|png|gif)$/)) {
+            return cb(new Error('Only image files are allowed'));
+        }
+        cb(null, true);
+    }
+});
 
 
 const db = mysql.createPool({
@@ -69,39 +94,6 @@ db.getConnection((err, connection) => {
         connection.release(); // Release the connection when done
     }
 });
-
-// Middleware to verify JWT token
-function verifyToken(req, res, next) {
-    const token = req.headers.authorization.split(" ")[1];
-
-    if (!token) {
-        return res.status(403).json({ error: 'Token not provided' });
-    }
-
-    jwt.verify(token, secretKey, (err, decoded) => {
-        if (err) {
-            console.error('Token verification error:', err);
-            // Handle specific error cases if needed
-            if (err.name === 'TokenExpiredError') {
-                return res.status(401).json({ error: 'Token expired' });
-            }
-            return res.status(401).json({ error: 'Invalid token' });
-        }
-
-        console.log('Decoded token:', decoded);
-        req.user = decoded;
-        next();
-    });
-
-
-}
-
-// Function for getting current user
-app.get("/currentUser", verifyToken, (req, res) => {
-    const { username, role } = req.user;
-    res.json({ user: username, role });
-});
-
 
 // Signup route with password hashing
 app.post("/signup", async (req, res) => {
@@ -125,11 +117,9 @@ app.post("/signup", async (req, res) => {
         const newId = generateRandomAlphanumericId(9);
         const sql = "INSERT INTO users (UserID, username, password, UserType) VALUES (?, ?, ?, ?)";
 
-        await db.promise().execute(sql, [newId, username, hashedPassword, UserType]);
+        await db.promise().query(sql, [newId, username, hashedPassword, UserType]);
 
-        const token = jwt.sign({ username }, secretKey, { expiresIn: "1h" });
-
-        res.status(200).json({ success: true, message: "Account successfully created", token });
+        res.status(200).json({ success: true, message: "Account successfully created" });
     } catch (error) {
         console.error("Database error: " + error);
         res.status(500).json({ success: false, error: "Internal Server Error" });
@@ -150,7 +140,6 @@ app.post("/login", async (req, res) => {
         if (user.length === 0) {
             return res.status(400).json({ success: false, error: "Username or Password is incorrect" });
         }
-        const role = user[0].UserType;
 
         const match = await bcrypt.compare(password, user[0].Password);
 
@@ -158,140 +147,166 @@ app.post("/login", async (req, res) => {
             return res.status(400).json({ success: false, error: "Username or Password is incorrect" });
         }
 
-        const token = jwt.sign({ username, role }, secretKey, { expiresIn: "1h" });
-
-        res.status(200).json({ success: true, message: "Successfully logged in", token });
+        res.status(200).json({ success: true, message: "Successfully logged in" });
     } catch (error) {
         console.error("Database error: " + error);
         res.status(500).json({ success: false, error: "Internal Server Error" });
     }
 });
 
-app.post("/createProducts", function (req, res) {
-    let products = req.body;
-    const images = req.files && req.files.image;
+// Route for creating new products
+app.post("/createProducts", upload.array("images", 5), async (req, res) => {
+    const newId = generateRandomAlphanumericId(9);
 
-    // Convert to array if it's a single product
-    if (!Array.isArray(products)) {
-        products = [products];
-    }
+    try {
+        // Parse incoming request body for product data
+        const { name, description, price, category, stockquantity, model, manufacturer } = req.body;
 
-    // Check if the array is empty
-    if (!products.length) {
-        res.status(301).json({ success: false, error: "No products provided" });
-        return;
-    }
-
-    // Check if images are provided
-    if (!images || (Array.isArray(images) && images.length === 0)) {
-        res.status(301).json({ success: false, error: "No images provided" });
-        return;
-    }
-
-    // Function to validate image files
-    const isValidImage = (file) => {
-        const allowedExtensions = ["jpg", "jpeg", "png", "gif"];
-        const maxSizeInBytes = 5 * 1024 * 1024; // 5MB
-
-        const fileExtension = file.name.split(".").pop();
-        return allowedExtensions.includes(fileExtension) && file.size <= maxSizeInBytes;
-    };
-
-
-
-    // Ensure images is always an array
-    const imageArray = Array.isArray(images) ? images : [images];
-
-    // Check if the uploaded files are images and of appropriate size
-    if (!imageArray.every(isValidImage)) {
-        res.status(301).json({ success: false, error: "Invalid or oversized images provided" });
-        return;
-    }
-
-    // Array of product values
-    const values = products.map((product, index) => {
-        const { name, description, price, stockquantity, model, category } = product;
-        const newId = generateRandomAlphanumericId(9);
-        const currentDate = new Date().toISOString();
-        const image = imageArray[index];
-
-        // Move the image to the /assets/products folder
-        const imagePath = path.join(__dirname, "/assets/products", newId + "_" + image.name);
-        image.mv(imagePath, (err) => {
+        // Check if the product already exists in the database
+        const productExistsQuery = `SELECT COUNT(*) AS count FROM products WHERE Name = ?`;
+        db.query(productExistsQuery, [name], (err, result) => {
             if (err) {
-                console.log("Error moving image: " + err);
+                console.error("Database error:", err);
+                return res.status(500).json({ success: false, error: "Internal Server Error" });
             }
+
+            const productCount = result[0].count;
+            if (productCount > 0) {
+                // Product already exists, return error response
+                return res.status(400).json({ success: false, error: "Product already exists" });
+            }
+
+            // Get current date and time
+            const currentDate = new Date();
+            // Format date and time as per your database requirements
+            const formattedDate = currentDate.toISOString().slice(0, 19).replace('T', ' ');
+
+            // Insert product data into products table
+            const productInsertQuery = `
+                INSERT INTO products (ProductID, Name, Description, Price, Category, StockQuantity, Model, Manufacturer, date_uploaded)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            `;
+
+            // Inserting product details in the database
+            db.query(productInsertQuery, [newId, name, description, price, category, stockquantity, model, manufacturer, formattedDate], (err, productResult) => {
+                if (err) {
+                    console.error("Database error:", err);
+                    return res.status(500).json({ success: false, error: "Internal Server Error" });
+                }
+
+                // Retrieve auto generated id
+                const productId = productResult.insertId;
+
+                const imageNames = req.files.map(file => file.filename);
+
+                // Insert image names into the database
+                const imageInsertQuery = `INSERT INTO product_images (ProductID, URL) VALUES (?, ?)`;
+
+                // Use a loop or Promise.all to ensure all image insertions are completed before sending response
+                const insertPromises = imageNames.map(imageName => {
+                    return new Promise((resolve, reject) => {
+                        db.query(imageInsertQuery, [productId, imageName], (err, imageResult) => {
+                            if (err) {
+                                console.error("Database error:", err);
+                                reject(err);
+                            } else {
+                                resolve();
+                            }
+                        });
+                    });
+                });
+
+                Promise.all(insertPromises)
+                    .then(() => {
+                        console.log('Product and images uploaded successfully.');
+                        res.status(200).send('Product and images uploaded successfully.');
+                    })
+                    .catch(error => {
+                        console.error("Error inserting image data:", error);
+                        res.status(500).json({ success: false, error: "Internal Server Error" });
+                    });
+            });
         });
-
-        // Store relative path in the database
-        const relativeImagePath = `products/${newId}_${image.name}`;
-
-        return [newId, name, description, price, stockquantity, category, model, currentDate, relativeImagePath];
-    });
-
-
-    const sql = "INSERT INTO products (ProductID, Name, Description, Price, StockQuantity, Category, Model, date_uploaded, Images) VALUES ?";
-
-    db.query(sql, [values], (err, results) => {
-        if (err) {
-            console.log("Database error: " + err);
-            res.status(500).json({ success: false, error: "Internal Server Error" });
-            return;
-        }
-
-        res.status(200).json({ success: true, message: "Products successfully created" });
-    });
+    } catch (error) {
+        // Handle errors
+        console.error('Error adding product:', error);
+        res.status(500).json({ error: 'Internal server error' });
+    }
 });
 
 
-// Search Products
-app.get("/product/:ProductID", function (req, res) {
-    const productID = req.params.ProductID; // Use consistent naming
 
-    console.log("Requested Product ID:", productID);
+// Add an endpoint to retrieve all images for a product
+app.get("/productImages/:productId", (req, res) => {
+    const productId = req.params.productId;
+
+    const sql = "SELECT * FROM product_images WHERE ProductID = ?";
+
+    db.query(sql, [productId], (err, result) => {
+        if (err) {
+            console.error("Database error:", err);
+            return res.status(500).json({ success: false, error: "Internal Server Error" });
+        } else if (result.length === 0) {
+            res.status(400).json({ success: false, error: "The Images for this product are not available" });
+        } else {
+            res.status(200).json({ success: true, images: result });
+        }
+    });
+});
+
+// Update the "/product/:ProductID" endpoint to fetch product images
+app.get("/product/:ProductID", function (req, res) {
+    const productID = req.params.ProductID;
 
     if (!productID) {
         console.log("Product ID not provided");
-        res.status(400).json({ success: false, error: "Product ID not provided" });
-        return;
+        return res.status(400).json({ success: false, error: "Product ID not provided" });
     }
 
-    // Get the host address dynamically
-    const host = req.get('host');
+    const getProductQuery = "SELECT * FROM products WHERE ProductID = ?";
+    const getProductImagesQuery = "SELECT URL FROM product_images WHERE ProductID = ?";
 
-    const sql = "SELECT * FROM products WHERE ProductID = ?";
-
-    db.query(sql, [productID], (err, result) => {
+    db.query(getProductQuery, [productID], (err, productResult) => {
         if (err) {
-            // Handle db error
-            console.log("Database error:", err);
-            res.status(500).json({ success: false, error: "Internal Server Error" });
-            return;
+            console.error("Database error:", err);
+            return res.status(500).json({ success: false, error: "Internal Server Error" });
         }
 
-        if (result.length < 1) {
-            res.status(404).json({ success: false, error: "Product not found" });
-        } else {
-            // Dynamically generate full image paths
-            const productsWithFullImagePath = result.map((product) => {
-                const { Images: relativeImagePath, ...otherProductDetails } = product;
-                const fullImagePath = `http://${host}/assets/${relativeImagePath}`;
-                return { ...otherProductDetails, Images: fullImagePath };
+        if (productResult.length < 1) {
+            return res.status(404).json({ success: false, error: "Product not found" });
+        }
+
+        const product = productResult[0];
+        const getProductImages = () => {
+            return new Promise((resolve, reject) => {
+                db.query(getProductImagesQuery, [productID], (err, imagesResult) => {
+                    if (err) {
+                        console.error("Database error:", err);
+                        reject(err);
+                    }
+                    resolve(imagesResult.map(image => image.URL));
+                });
             });
+        };
 
-            res.status(200).json(productsWithFullImagePath);
-        }
+        getProductImages()
+            .then(images => {
+                const host = req.get('host');
+                const fullImages = images.map(image => `http://${host}${image}`);
+                res.status(200).json({ ...product, Images: fullImages });
+            })
+            .catch(error => {
+                console.error("Error fetching product images:", error);
+                res.status(500).json({ success: false, error: "Internal Server Error" });
+            });
     });
 });
 
-
-
-// Get Products
+// Get Products with One Image URL
 app.get("/products", function (req, res) {
-    const sql = "SELECT * FROM products ORDER BY date_uploaded";
+    const sql = "SELECT * FROM products JOIN product_images WHERE ProductID = product_images.ProductID";
 
-    // Get the host address dynamically
-    const host = req.get('host');
+
 
     db.query(sql, (err, result) => {
         if (err) {
@@ -299,18 +314,29 @@ app.get("/products", function (req, res) {
             console.log("Database error: " + err);
             res.status(500).json({ success: false, error: "Internal Server Error" });
             return;
-        } else {
-            // Dynamically generate full image paths
-            const productsWithFullImagePath = result.map((product) => {
-                const { Images: relativeImagePath, ...otherProductDetails } = product;
-                const fullImagePath = `http://${host}/assets/${relativeImagePath}`;
-                return { ...otherProductDetails, Images: fullImagePath };
-            });
-
-            res.status(200).json(productsWithFullImagePath);
         }
+
+        // Get the host address dynamically
+        const host = req.get('host');
+
+        const protocal = req.protocol;
+
+        // Map products to include only one image URL
+        const productsWithOneImage = result.reduce((acc, product) => {
+            if (!acc[product.ProductID]) {
+                acc[product.ProductID] = { ...product, Images: `${protocal}://${host}${product.URL}` };
+            }
+            return acc;
+        }, {});
+
+        // Convert object to array
+        const productsArray = Object.values(productsWithOneImage);
+
+        res.status(200).json(productsArray);
     });
 });
+
+
 
 // Delete products
 app.delete("/products/:id", (req, res) => {
@@ -327,73 +353,6 @@ app.delete("/products/:id", (req, res) => {
         }
     });
 });
-
-// Manufacturer information addition route
-app.post("/addManufacturer", function (req, res) {
-    const { name, description } = req.body;
-
-    if (!name, !description) {
-        res.status(301).json({ success: false, error: "All fields are required" });
-    } else {
-        // Check if manufacturer already exists
-        db.query("SELECT * FROM manufacturers WHERE Name = ?", [name], (err, result) => {
-            if (err) {
-                // Handle db error
-                console.log("Database error: " + err);
-                res.status(500).json({ success: false, error: "Internal Server Error" });
-                return;
-            }
-
-            // If Manufacturer is found
-            if (result.length > 0) {
-                res.status(301).json({ success: false, error: `The Manufacturer, ${name}, already exists` });
-            } else {
-                // Manufacturer is not found
-                const sql = "INSERT INTO manufacturers (ManufacturerID, Name, Description) VALUES (?,?,?)";
-
-                const newId = generateRandomAlphanumericId(9);
-
-                // Logic execution
-                db.query(sql, [newId, name, description], (err, result) => {
-                    if (err) {
-                        // Handle db error during insert
-                        console.log("Database error: " + err);
-                        res.status(500).json({ success: false, error: "Internal Server Error" });
-                        return;
-                    }
-                    res.status(200).json({ success: true, message: "Manufacturer successfully added." });
-                });
-
-            }
-        })
-    }
-});
-
-// Get Orders 
-app.get("/orders", verifyToken, (req, res) => {
-    const { role } = req.user;
-
-    if (role !== "admin") {
-        res.status(400).json({ success: false, error: "You must be an admin" });
-    } else {
-        const sql = "SELECT * FROM orders";
-
-        // Logic execution
-        db.query(sql, (err, result) => {
-            if (err) {
-                // Handle db error during insert
-                console.log("Database error: " + err);
-                res.status(500).json({ success: false, error: "Internal Server Error" });
-                return;
-            } else {
-                res.status(200).json({ success: true, message: "Orders successfully queried.", result });
-            }
-        });
-    }
-
-
-})
-
 
 // Handling 404 errors
 app.use((req, res) => {
