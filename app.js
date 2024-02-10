@@ -1,7 +1,7 @@
 const express = require("express");
 const cors = require("cors");
 const bcrypt = require("bcrypt");
-const session = require("express-session");
+const jwt = require("jsonwebtoken");
 const multer = require("multer");
 const fs = require("fs");
 const path = require("path");
@@ -28,16 +28,35 @@ app.use((req, res, next) => {
 // Serve static files from the assets directory
 app.use('/assets', express.static(path.join(__dirname, 'assets')));
 
-// Session middleware setup
-app.use(session({
-    secret: process.env.SESSION_SECRET || "2/19978d,8£!q5D`2$g#",
-    resave: false,
-    saveUninitialized: false,
-    cookie: {
-        secure: true,
-        maxAge: 1000 * 60 * 60 * 24 * 30
+const secret = process.env.JWT_SECRET || "2/19978d,8£!q5D`2$g#";
+
+// Middleware to verify JWT
+function verifyToken(req, res, next) {
+    const token = req.headers.authorization;
+
+    if (!token) {
+        return res.status(401).json({ success: false, message: "Token not provided" });
     }
-}));
+
+    jwt.verify(token, secret, (err, decoded) => {
+        if (err) {
+            if (err.name === 'TokenExpiredError') {
+                return res.status(401).json({ success: false, message: "Token has expired" });
+            } else {
+                console.error("JWT verification error:", err);
+                return res.status(403).json({ success: false, message: "Invalid token" });
+            }
+        }
+
+        // If token is valid, add the decoded user information to the request object
+        req.user = decoded;
+
+        // Proceed to the next middleware or route handler
+        next();
+    });
+}
+
+
 
 // Function to generate a unique ID
 // Function to generate a random alphanumeric ID with a specific length
@@ -147,12 +166,35 @@ app.post("/login", async (req, res) => {
             return res.status(400).json({ success: false, error: "Username or Password is incorrect" });
         }
 
-        res.status(200).json({ success: true, message: "Successfully logged in" });
+        // Generate JWT
+        const token = jwt.sign({ username: username, }, secret, { expiresIn: '1h' });
+
+        res.status(200).json({ success: true, message: "Successfully logged in" , token});
     } catch (error) {
         console.error("Database error: " + error);
         res.status(500).json({ success: false, error: "Internal Server Error" });
     }
 });
+
+// // Route handler for /currentUser endpoint
+// app.get("/currentUser", getUsernameFromToken, verifyToken, async (req, res) => {
+//     try {
+//         // Access the username from the request object
+//         const username = req.username;
+
+//         // Fetch user role from the database based on the username
+//         const userRole = await getUserRole(username);
+
+//         // Return both username and role in the response
+//         res.json({ success: true, username: username, role: userRole });
+//     } catch (error) {
+//         console.error("Error fetching user role:", error);
+//         res.status(500).json({ success: false, error: "Internal Server Error" });
+//     }
+// });
+
+
+
 
 // Route for creating new products
 app.post("/createProducts", upload.array("images", 5), async (req, res) => {
@@ -195,7 +237,7 @@ app.post("/createProducts", upload.array("images", 5), async (req, res) => {
                 }
 
                 // Retrieve auto generated id
-                const productId = productResult.insertId;
+                const productId = newId;
 
                 const imageNames = req.files.map(file => file.filename);
 
@@ -234,26 +276,6 @@ app.post("/createProducts", upload.array("images", 5), async (req, res) => {
     }
 });
 
-
-
-// Add an endpoint to retrieve all images for a product
-app.get("/productImages/:productId", (req, res) => {
-    const productId = req.params.productId;
-
-    const sql = "SELECT * FROM product_images WHERE ProductID = ?";
-
-    db.query(sql, [productId], (err, result) => {
-        if (err) {
-            console.error("Database error:", err);
-            return res.status(500).json({ success: false, error: "Internal Server Error" });
-        } else if (result.length === 0) {
-            res.status(400).json({ success: false, error: "The Images for this product are not available" });
-        } else {
-            res.status(200).json({ success: true, images: result });
-        }
-    });
-});
-
 // Update the "/product/:ProductID" endpoint to fetch product images
 app.get("/product/:ProductID", function (req, res) {
     const productID = req.params.ProductID;
@@ -277,36 +299,39 @@ app.get("/product/:ProductID", function (req, res) {
         }
 
         const product = productResult[0];
-        const getProductImages = () => {
-            return new Promise((resolve, reject) => {
-                db.query(getProductImagesQuery, [productID], (err, imagesResult) => {
-                    if (err) {
-                        console.error("Database error:", err);
-                        reject(err);
-                    }
-                    resolve(imagesResult.map(image => image.URL));
-                });
-            });
-        };
 
-        getProductImages()
-            .then(images => {
-                const host = req.get('host');
-                const fullImages = images.map(image => `http://${host}${image}`);
-                res.status(200).json({ ...product, Images: fullImages });
-            })
-            .catch(error => {
-                console.error("Error fetching product images:", error);
-                res.status(500).json({ success: false, error: "Internal Server Error" });
-            });
+        db.query(getProductImagesQuery, [productID], (err, imagesResult) => {
+            if (err) {
+                console.error("Database error:", err);
+                return res.status(500).json({ success: false, error: "Internal Server Error" });
+            }
+
+            const host = req.get('host');
+            const protocol = req.protocol;
+
+            // Construct full image URLs
+            const images = imagesResult.map(image => `${protocol}://${host}/assets/products/${image.URL}`);
+
+            // Combine product details with image URLs
+            const productWithImages = { ...product, Images: images };
+
+            res.status(200).json(productWithImages);
+        });
     });
 });
 
+
 // Get Products with One Image URL
 app.get("/products", function (req, res) {
-    const sql = "SELECT * FROM products JOIN product_images WHERE ProductID = product_images.ProductID";
-
-
+    const sql = `
+        SELECT p.*, pi.URL AS ImageURL
+        FROM products p
+        INNER JOIN (
+            SELECT ProductID, URL
+            FROM product_images
+            GROUP BY ProductID
+        ) pi ON p.ProductID = pi.ProductID
+    `;
 
     db.query(sql, (err, result) => {
         if (err) {
@@ -318,41 +343,64 @@ app.get("/products", function (req, res) {
 
         // Get the host address dynamically
         const host = req.get('host');
+        const protocol = req.protocol;
 
-        const protocal = req.protocol;
+        // Add the protocol and host to each image URL
+        result.forEach(product => {
+            product.ImageURL = `${protocol}://${host}/assets/products/${product.ImageURL}`;
+        });
 
-        // Map products to include only one image URL
-        const productsWithOneImage = result.reduce((acc, product) => {
-            if (!acc[product.ProductID]) {
-                acc[product.ProductID] = { ...product, Images: `${protocal}://${host}${product.URL}` };
-            }
-            return acc;
-        }, {});
-
-        // Convert object to array
-        const productsArray = Object.values(productsWithOneImage);
-
-        res.status(200).json(productsArray);
+        res.status(200).json(result);
     });
 });
+
 
 
 
 // Delete products
-app.delete("/products/:id", (req, res) => {
-    const productId = req.params.id;
+app.delete("/products/:productId", (req, res) => {
+    const productId = req.params.productId;
 
-    const query = 'DELETE FROM products WHERE id = ?';
+    // Query to fetch image URLs related to the product
+    const getImageUrlsQuery = 'SELECT URL FROM product_images WHERE ProductID = ?';
 
-    db.query(query, [productId], (err, results) => {
+    db.query(getImageUrlsQuery, [productId], (err, imageResults) => {
         if (err) {
-            console.error('Error deleting product:', err);
+            console.error('Error fetching image URLs:', err);
             res.status(500).json({ error: 'Internal Server Error' });
-        } else {
-            res.status(204).send(); // 204 No Content - successful deletion
+            return;
         }
+
+        // Extract image URLs from the query results
+        const imageUrls = imageResults.map(image => image.URL);
+
+        // Query to delete product record from the database
+        const deleteProductQuery = 'DELETE FROM products WHERE ProductID = ?';
+
+        db.query(deleteProductQuery, [productId], (err, productDeleteResult) => {
+            if (err) {
+                console.error('Error deleting product:', err);
+                res.status(500).json({ error: 'Internal Server Error' });
+                return;
+            }
+
+            // Delete image files from the /assets/products/ folder
+            imageUrls.forEach(imageUrl => {
+                const imagePath = path.join(__dirname, 'assets', 'products', imageUrl);
+                fs.unlink(imagePath, (err) => {
+                    if (err) {
+                        console.error('Error deleting image file:', err);
+                    } else {
+                        console.log('Image file deleted successfully:', imagePath);
+                    }
+                });
+            });
+
+            res.status(204).send(); // 204 No Content - successful deletion
+        });
     });
 });
+
 
 // Handling 404 errors
 app.use((req, res) => {
