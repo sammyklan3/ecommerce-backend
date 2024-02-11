@@ -169,7 +169,7 @@ app.post("/login", async (req, res) => {
         // Generate JWT
         const token = jwt.sign({ username: username, }, secret, { expiresIn: '1h' });
 
-        res.status(200).json({ success: true, message: "Successfully logged in" , token});
+        res.status(200).json({ success: true, message: "Successfully logged in", token });
     } catch (error) {
         console.error("Database error: " + error);
         res.status(500).json({ success: false, error: "Internal Server Error" });
@@ -287,6 +287,7 @@ app.get("/product/:ProductID", function (req, res) {
 
     const getProductQuery = "SELECT * FROM products WHERE ProductID = ?";
     const getProductImagesQuery = "SELECT URL FROM product_images WHERE ProductID = ?";
+    const getReviews = "SELECT * FROM reviews WHERE ProductID = ?";
 
     db.query(getProductQuery, [productID], (err, productResult) => {
         if (err) {
@@ -312,10 +313,23 @@ app.get("/product/:ProductID", function (req, res) {
             // Construct full image URLs
             const images = imagesResult.map(image => `${protocol}://${host}/assets/products/${image.URL}`);
 
-            // Combine product details with image URLs
-            const productWithImages = { ...product, Images: images };
 
-            res.status(200).json(productWithImages);
+            db.query(getReviews, [productID], (err, results) => {
+                if (err) {
+                    console.error("Database error:", err);
+                    return res.status(500).json({ success: false, error: "Internal Server Error" });
+                } else {
+                    const review = results.map((review) => {return review})
+
+                    // Combine product details with image URLs
+                    const productWithImages = { ...product, Images: images, Reviews: review };
+
+                    res.status(200).json(productWithImages);
+                }
+            });
+
+
+
         });
     });
 });
