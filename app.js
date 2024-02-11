@@ -26,7 +26,7 @@ app.use((req, res, next) => {
 });
 
 // Serve static files from the assets directory
-app.use('/assets', express.static(path.join(__dirname, 'assets')));
+app.use('/public/assets', express.static(path.join(__dirname, 'public', 'assets')));
 
 const secret = process.env.JWT_SECRET || "2/19978d,8£!q5D`2$g#";
 
@@ -86,7 +86,7 @@ const upload = multer({
     storage: storage, // Specify the storage configuration
     fileFilter: (req, file, cb) => {
         // Check if file is an image
-        if (!file.originalname.match(/\.(jpg|jpeg|png|gif)$/)) {
+        if (!file.originalname.match(/\.(jpg|jpeg|png|gif|webp)$/)) {
             return cb(new Error('Only image files are allowed'));
         }
         cb(null, true);
@@ -304,7 +304,7 @@ app.get("/product/:ProductID", function (req, res) {
             const protocol = req.protocol;
 
             // Construct full image URLs
-            const images = imagesResult.map(image => `${protocol}://${host}/assets/${image.URL}`);
+            const images = imagesResult.map(image => `${protocol}://${host}/public/assets/${image.URL}`);
 
 
             db.query(getReviews, [productID], (err, results) => {
@@ -315,7 +315,7 @@ app.get("/product/:ProductID", function (req, res) {
                     const review = results.map((review) => {return review})
 
                     results.forEach(reviewItem => {
-                        reviewItem.profile_image = `${protocol}://${host}/assets/${reviewItem.profile_image}`;
+                        reviewItem.profile_image = `${protocol}://${host}/public/assets/${reviewItem.profile_image}`;
                     });
 
                     // Combine product details with image URLs
@@ -358,7 +358,7 @@ app.get("/products", function (req, res) {
 
         // Add the protocol and host to each image URL
         result.forEach(product => {
-            product.ImageURL = `${protocol}://${host}/assets/${product.ImageURL}`;
+            product.ImageURL = `${protocol}://${host}/public/assets/${product.ImageURL}`;
         });
 
         res.status(200).json(result);
@@ -397,7 +397,7 @@ app.delete("/products/:productId", (req, res) => {
 
             // Delete image files from the /assets/products/ folder
             imageUrls.forEach(imageUrl => {
-                const imagePath = path.join(__dirname, 'assets', 'products', imageUrl);
+                const imagePath = path.join(__dirname, 'public', 'assets', imageUrl);
                 fs.unlink(imagePath, (err) => {
                     if (err) {
                         console.error('Error deleting image file:', err);
