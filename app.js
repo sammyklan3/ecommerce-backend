@@ -32,7 +32,7 @@ const secret = process.env.JWT_SECRET || "2/19978d,8£!q5D`2$g#";
 
 // Middleware to verify JWT
 function verifyToken(req, res, next) {
-    const token = req.headers.authorization;
+    const token= req.headers.authorization.split("")[1];
 
     if (!token) {
         return res.status(401).json({ success: false, message: "Token not provided" });
@@ -74,7 +74,7 @@ function generateRandomAlphanumericId(length) {
 
 const storage = multer.diskStorage({
     destination: function (req, file, cb) {
-        cb(null, path.join(__dirname, 'assets/products'));
+        cb(null, path.join(__dirname, '/public/assets/'));
     },
     filename: function (req, file, cb) {
         const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
@@ -176,22 +176,15 @@ app.post("/login", async (req, res) => {
     }
 });
 
-// // Route handler for /currentUser endpoint
-// app.get("/currentUser", getUsernameFromToken, verifyToken, async (req, res) => {
-//     try {
-//         // Access the username from the request object
-//         const username = req.username;
+// Route handler for /currentUser endpoint
+app.get("/currentUser", verifyToken, async (req, res) => {
+    try {
 
-//         // Fetch user role from the database based on the username
-//         const userRole = await getUserRole(username);
-
-//         // Return both username and role in the response
-//         res.json({ success: true, username: username, role: userRole });
-//     } catch (error) {
-//         console.error("Error fetching user role:", error);
-//         res.status(500).json({ success: false, error: "Internal Server Error" });
-//     }
-// });
+    } catch (error) {
+        console.error("Error fetching user role:", error);
+        res.status(500).json({ success: false, error: "Internal Server Error" });
+    }
+});
 
 
 
@@ -287,7 +280,7 @@ app.get("/product/:ProductID", function (req, res) {
 
     const getProductQuery = "SELECT * FROM products WHERE ProductID = ?";
     const getProductImagesQuery = "SELECT URL FROM product_images WHERE ProductID = ?";
-    const getReviews = "SELECT * FROM reviews WHERE ProductID = ?";
+    const getReviews = "SELECT reviews.*, users.username, users.profile_image FROM reviews INNER JOIN users ON reviews.UserID = users.UserID WHERE reviews.ProductID = ?";
 
     db.query(getProductQuery, [productID], (err, productResult) => {
         if (err) {
@@ -311,7 +304,7 @@ app.get("/product/:ProductID", function (req, res) {
             const protocol = req.protocol;
 
             // Construct full image URLs
-            const images = imagesResult.map(image => `${protocol}://${host}/assets/products/${image.URL}`);
+            const images = imagesResult.map(image => `${protocol}://${host}/assets/${image.URL}`);
 
 
             db.query(getReviews, [productID], (err, results) => {
@@ -320,6 +313,10 @@ app.get("/product/:ProductID", function (req, res) {
                     return res.status(500).json({ success: false, error: "Internal Server Error" });
                 } else {
                     const review = results.map((review) => {return review})
+
+                    results.forEach(reviewItem => {
+                        reviewItem.profile_image = `${protocol}://${host}/assets/${reviewItem.profile_image}`;
+                    });
 
                     // Combine product details with image URLs
                     const productWithImages = { ...product, Images: images, Reviews: review };
@@ -361,7 +358,7 @@ app.get("/products", function (req, res) {
 
         // Add the protocol and host to each image URL
         result.forEach(product => {
-            product.ImageURL = `${protocol}://${host}/assets/products/${product.ImageURL}`;
+            product.ImageURL = `${protocol}://${host}/assets/${product.ImageURL}`;
         });
 
         res.status(200).json(result);
@@ -412,6 +409,18 @@ app.delete("/products/:productId", (req, res) => {
 
             res.status(204).send(); // 204 No Content - successful deletion
         });
+    });
+});
+
+app.get ("/orders", (req, res) => {
+    const query = "SELECT * FROM orders";
+    db.query(query, (err, result) => {
+        if (err) {
+            console.error("Database error:", err);
+            return res.status(500).json({ success: false, error: "Internal Server Error" });
+        } else {
+            res.status(200).json(result);
+        }
     });
 });
 
