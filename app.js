@@ -115,7 +115,7 @@ db.getConnection((err, connection) => {
 });
 
 app.get("/", async(req, res) => {
-    console.log(`Server is running at ${req.protocol}://${req.get("host")}:${port}`);
+    res.status(200).json({ success: true, message: `Server is running at ${req.protocol}://${req.get("host")}` });
 });
 
 // Signup route with password hashing
