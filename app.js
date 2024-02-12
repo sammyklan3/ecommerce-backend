@@ -114,6 +114,10 @@ db.getConnection((err, connection) => {
     }
 });
 
+app.get("/", async(req, res) => {
+    console.log(`Server is running at ${req.protocol}://${req.get("host")}:${port}`);
+});
+
 // Signup route with password hashing
 app.post("/signup", async (req, res) => {
     const { username, password } = req.body;
@@ -431,5 +435,5 @@ app.use((req, res) => {
 });
 
 app.listen(port, () => {
-    console.log(`Server is running at ${req.protocol}://${req.get("host")}:${port}`);
+    console.log(`Server is running at port:${port}`);
 });
