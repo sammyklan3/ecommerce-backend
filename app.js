@@ -32,7 +32,7 @@ const secret = process.env.JWT_SECRET || "2/19978d,8£!q5D`2$g#";
 
 // Middleware to verify JWT
 function verifyToken(req, res, next) {
-    const token= req.headers.authorization.split("")[1];
+    const token = req.headers.authorization.split("")[1];
 
     if (!token) {
         return res.status(401).json({ success: false, message: "Token not provided" });
@@ -114,7 +114,7 @@ db.getConnection((err, connection) => {
     }
 });
 
-app.get("/", async(req, res) => {
+app.get("/", async (req, res) => {
     res.status(200).json({ success: true, message: `Server is running at ${req.protocol}://${req.get("host")}` });
 });
 
@@ -316,7 +316,7 @@ app.get("/product/:ProductID", function (req, res) {
                     console.error("Database error:", err);
                     return res.status(500).json({ success: false, error: "Internal Server Error" });
                 } else {
-                    const review = results.map((review) => {return review})
+                    const review = results.map((review) => { return review })
 
                     results.forEach(reviewItem => {
                         reviewItem.profile_image = `${protocol}://${host}/public/assets/${reviewItem.profile_image}`;
@@ -354,18 +354,21 @@ app.get("/products", function (req, res) {
             console.log("Database error: " + err);
             res.status(500).json({ success: false, error: "Internal Server Error" });
             return;
+        } else if (result.length === 0) {
+            res.status(404).json({ success: false, error: "There are no products available" });
+        } else {
+            // Get the host address dynamically
+            const host = req.get('host');
+            const protocol = req.protocol;
+
+            // Add the protocol and host to each image URL
+            result.forEach(product => {
+                product.ImageURL = `${protocol}://${host}/public/assets/${product.ImageURL}`;
+            });
+
+            res.status(200).json(result);
         }
 
-        // Get the host address dynamically
-        const host = req.get('host');
-        const protocol = req.protocol;
-
-        // Add the protocol and host to each image URL
-        result.forEach(product => {
-            product.ImageURL = `${protocol}://${host}/public/assets/${product.ImageURL}`;
-        });
-
-        res.status(200).json(result);
     });
 });
 
@@ -397,6 +400,8 @@ app.delete("/products/:productId", (req, res) => {
                 console.error('Error deleting product:', err);
                 res.status(500).json({ error: 'Internal Server Error' });
                 return;
+            } else if( productDeleteResult.length === 0) {
+                res.status(404).json({ success:flase , error: "The products is not available." });
             }
 
             // Delete image files from the /assets/products/ folder
@@ -416,7 +421,7 @@ app.delete("/products/:productId", (req, res) => {
     });
 });
 
-app.get ("/orders", (req, res) => {
+app.get("/orders", (req, res) => {
     const query = "SELECT * FROM orders";
     db.query(query, (err, result) => {
         if (err) {
