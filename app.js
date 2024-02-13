@@ -95,7 +95,7 @@ const upload = multer({
 
 
 const db = mysql.createPool({
-    host: "localhost",
+    host: "200.134.155.78",
     user: "root",
     password: "",
     database: "phonepartsstore",
