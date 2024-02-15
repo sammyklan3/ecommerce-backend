@@ -2,6 +2,7 @@
 const authRoutes = require("./routes/authRoutes");
 const productRoutes = require("./routes/productRoutes");
 const ordersRoutes = require("./routes/ordersRoutes");
+const homeRoutes = require("./routes/homeRoute");
 // Import other route modules as needed
 
 const cors = require("cors");
@@ -18,8 +19,9 @@ app.use(bodyParser.json());
 
 // Use route modules
 app.use("/login", authRoutes);
-app.use("/", productRoutes);
+app.use("/products", productRoutes);
 app.use("/orders", ordersRoutes);
+app.use("/", homeRoutes);
 // Use other route modules as needed
 
 // Handling 404 errors
@@ -28,5 +30,5 @@ app.use((req, res) => {
 });
 
 app.listen(port, () => {
-    console.log(`Server is running at port:${port}`);
+    console.log(`Server is running at http://localhost:${port}`);
 });

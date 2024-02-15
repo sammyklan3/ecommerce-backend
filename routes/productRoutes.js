@@ -5,7 +5,7 @@ const { createProduct, getProduct, getProducts, deleteProduct } = require('../co
 
 router.post("/createProducts", createProduct);
 router.get("/product/:ProductID", getProduct);
-router.get("/", getProducts);
+router.get("/products", getProducts);
 router.delete("/products/:productId", deleteProduct);
 
 module.exports = router;
