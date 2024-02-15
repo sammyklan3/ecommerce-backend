@@ -2,11 +2,11 @@
 const { Pool } = require('pg');
 
 const db = new Pool({
-    host: process.env.DB_HOST || "localhost",
-    user: process.env.DB_USER || "root",
-    password: process.env.DB_PASSWORD || "blackpanther",
-    database: process.env.DB_NAME || "phonepartsstore",
-    port: process.env.DB_PORT || 5432,
+    host: process.env.DB_HOST,
+    user: process.env.DB_USER,
+    password: process.env.DB_PASSWORD,
+    database: process.env.DB_NAME,
+    port: process.env.DB_PORT,
     max: 20, // Maximum number of clients in the pool 
     idleTimeoutMillis: 30000, // How long a client is allowed to remain idle before being closed
 });
