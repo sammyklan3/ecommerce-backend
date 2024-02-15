@@ -1,3 +1,6 @@
+// Load environment variables from .env file during development
+require('dotenv').config();
+
 const express = require("express");
 const cors = require("cors");
 const bcrypt = require("bcrypt");
@@ -7,16 +10,14 @@ const fs = require("fs");
 const path = require("path");
 const mysql = require("mysql2");
 const bodyParser = require("body-parser");
-require('dotenv').config(); // For handling environment variables
 
-const port = 3000;
+const port = process.env.PORT || 3000; // Use port from environment variable or default to 3000
 
 const app = express();
 
 const saltRounds = 10;
 
 app.use(cors());
-// Use bodyParser middleware to parse incoming JSON data
 app.use(bodyParser.json());
 
 // Middleware to log incoming requests
@@ -32,7 +33,7 @@ const secret = process.env.JWT_SECRET || "2/19978d,8£!q5D`2$g#";
 
 // Middleware to verify JWT
 function verifyToken(req, res, next) {
-    const token = req.headers.authorization.split("")[1];
+    const token = req.headers.authorization.split(".");
 
     if (!token) {
         return res.status(401).json({ success: false, message: "Token not provided" });
@@ -48,57 +49,16 @@ function verifyToken(req, res, next) {
             }
         }
 
-        // If token is valid, add the decoded user information to the request object
         req.user = decoded;
-
-        // Proceed to the next middleware or route handler
         next();
     });
 }
 
-
-
-// Function to generate a unique ID
-// Function to generate a random alphanumeric ID with a specific length
-function generateRandomAlphanumericId(length) {
-    const characters = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
-    let result = "";
-
-    for (let i = 0; i < length; i++) {
-        const randomIndex = Math.floor(Math.random() * characters.length);
-        result += characters.charAt(randomIndex);
-    }
-
-    return result;
-}
-
-const storage = multer.diskStorage({
-    destination: function (req, file, cb) {
-        cb(null, path.join(__dirname, '/public/assets/'));
-    },
-    filename: function (req, file, cb) {
-        const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
-        cb(null, uniqueSuffix + path.extname(file.originalname));
-    }
-});
-
-const upload = multer({
-    storage: storage, // Specify the storage configuration
-    fileFilter: (req, file, cb) => {
-        // Check if file is an image
-        if (!file.originalname.match(/\.(jpg|jpeg|png|gif|webp)$/)) {
-            return cb(new Error('Only image files are allowed'));
-        }
-        cb(null, true);
-    }
-});
-
-
 const db = mysql.createPool({
-    host: "200.134.155.78",
-    user: "root",
-    password: "",
-    database: "phonepartsstore",
+    host: process.env.DB_HOST || "localhost",
+    user: process.env.DB_USER || "root",
+    password: process.env.DB_PASSWORD || "",
+    database: process.env.DB_NAME || "phonepartsstore",
     connectionLimit: 10,
     waitForConnections: true,
     queueLimit: 0,
