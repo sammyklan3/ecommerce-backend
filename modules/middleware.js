@@ -2,6 +2,7 @@
 const express = require('express');
 const path = require('path');
 const jwt = require('jsonwebtoken');
+require('dotenv').config();
 
 const app = express();
 
@@ -18,7 +19,7 @@ function verifyToken(req, res, next) {
         try {
             const token = req.headers.authorization.split(" ")[1];
 
-            const secret = process.env.JWT_SECRET || "2/19978d,8£!q5D`2$g#";
+            const secret = process.env.JWT_SECRET;
 
             jwt.verify(token, secret, (err, decoded) => {
                 if (err) {
@@ -42,4 +43,17 @@ function verifyToken(req, res, next) {
     )
 }
 
-module.exports = { verifyToken };
+// Function to generate a random alphanumeric ID with a specific length
+function generateRandomAlphanumericId(length) {
+    const characters = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
+    let result = "";
+
+    for (let i = 0; i < length; i++) {
+        const randomIndex = Math.floor(Math.random() * characters.length);
+        result += characters.charAt(randomIndex);
+    }
+
+    return result;
+}
+
+module.exports = { app, verifyToken, generateRandomAlphanumericId };

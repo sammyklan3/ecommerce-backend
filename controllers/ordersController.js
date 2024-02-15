@@ -7,7 +7,11 @@ const getOrders = async (req, res) => {
             console.error("Database error:", err);
             return res.status(500).json({ success: false, error: "Internal Server Error" });
         } else {
-            res.status(200).json(result);
+            if (result.length > 0) {
+                res.status(200).json(result);
+            } else {
+                res.status(404).json({ success: false, error: "No orders found" });
+            }
         }
     })
 }

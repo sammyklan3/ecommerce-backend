@@ -1,4 +1,5 @@
 const db = require('../modules/db');
+const { generateRandomAlphanumericId } = require("../modules/middleware");
 
 const createProduct = async (req, res) => {
 

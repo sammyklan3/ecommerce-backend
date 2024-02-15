@@ -1,6 +1,9 @@
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
 const db = require('../modules/db');
+require('dotenv').config();
+
+const secret = process.env.JWT_SECRET;
 
 const signup = async (req, res) => {
     // Signup logic
