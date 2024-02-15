@@ -8,7 +8,7 @@ const jwt = require("jsonwebtoken");
 const multer = require("multer");
 const fs = require("fs");
 const path = require("path");
-const mysql = require("mysql2");
+const { Pool } = require("pg");
 const bodyParser = require("body-parser");
 
 const port = process.env.PORT || 3000; // Use port from environment variable or default to 3000
@@ -54,15 +54,14 @@ function verifyToken(req, res, next) {
     });
 }
 
-const db = mysql.createPool({
+const db = new Pool({
     host: process.env.DB_HOST || "localhost",
     user: process.env.DB_USER || "root",
     password: process.env.DB_PASSWORD || "",
     database: process.env.DB_NAME || "phonepartsstore",
     port: process.env.DB_PORT || 5432,
-    connectionLimit: 10,
-    waitForConnections: true,
-    queueLimit: 0,
+    max: 20, // Maximum number of clients in the pool 
+    idleTimeoutMillis: 30000, // How long a client is allowed to remain idle before being closed
 });
 
 const storage = multer.diskStorage({
@@ -75,14 +74,21 @@ const storage = multer.diskStorage({
     }
 });
 
-// Test the database connection
-db.getConnection((err, connection) => {
-    if (err) {
-        console.error('Database connection failed: ', err.message);
-    } else {
-        console.log('Database connection successful!');
-        connection.release(); // Release the connection when done
+const upload = multer({
+    storage: storage, // Specify the storage configuration
+    fileFilter: (req, file, cb) => {
+        // Check if file is an image
+        if (!file.originalname.match(/\.(jpg|jpeg|png|gif|webp)$/)) {
+            return cb(new Error('Only image files are allowed'));
+        }
+        cb(null, true);
     }
+});
+
+// Now you can use the pool to execute queries 
+db.query('SELECT * FROM users', (err, result) => {
+    if (err) { console.error('Error executing query:', err); }
+    else { console.log('Query result:', result.rows); }
 });
 
 app.get("/", async (req, res) => {
@@ -371,8 +377,8 @@ app.delete("/products/:productId", (req, res) => {
                 console.error('Error deleting product:', err);
                 res.status(500).json({ error: 'Internal Server Error' });
                 return;
-            } else if( productDeleteResult.length === 0) {
-                res.status(404).json({ success:flase , error: "The products is not available." });
+            } else if (productDeleteResult.length === 0) {
+                res.status(404).json({ success: flase, error: "The products is not available." });
             }
 
             // Delete image files from the /assets/products/ folder
