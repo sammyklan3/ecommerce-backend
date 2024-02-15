@@ -1,0 +1,21 @@
+// app.js
+const express = require('express');
+const cors = require('cors');
+const authRoutes = require('./routes/authRoutes');
+const productRoutes = require('./routes/productRoutes');
+// Import other route modules as needed
+
+const app = express();
+
+app.use(cors());
+app.use(express.json());
+
+// Use route modules
+app.use('/auth', authRoutes);
+app.use('/products', productRoutes);
+// Use other route modules as needed
+
+const port = process.env.PORT || 3000;
+app.listen(port, () => {
+    console.log(`Server is running at port:${port}`);
+});
