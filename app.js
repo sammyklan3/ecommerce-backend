@@ -59,6 +59,7 @@ const db = mysql.createPool({
     user: process.env.DB_USER || "root",
     password: process.env.DB_PASSWORD || "",
     database: process.env.DB_NAME || "phonepartsstore",
+    port: process.env.DB_PORT || 5432,
     connectionLimit: 10,
     waitForConnections: true,
     queueLimit: 0,
