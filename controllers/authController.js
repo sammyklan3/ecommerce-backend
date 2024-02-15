@@ -5,7 +5,7 @@ require('dotenv').config();
 
 const secret = process.env.JWT_SECRET;
 
-const signup = async (req, res) => {
+const signup = async(req, res) => {
     // Signup logic
     const { username, password } = req.body;
 
@@ -36,7 +36,7 @@ const signup = async (req, res) => {
     }
 };
 
-const login = async (req, res) => {
+const login = async(req, res) => {
     // Login logic
     const { username, password } = req.body;
 
@@ -67,4 +67,4 @@ const login = async (req, res) => {
     }
 };
 
-module.exports = { signup, login };
+module.exports =  { signup, login};

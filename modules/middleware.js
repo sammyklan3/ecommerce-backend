@@ -3,6 +3,8 @@ const express = require('express');
 const path = require('path');
 const jwt = require('jsonwebtoken');
 require('dotenv').config();
+const cors = require("cors");
+const bodyParser = require("body-parser");
 
 const app = express();
 
@@ -10,6 +12,9 @@ app.use((req, res, next) => {
     console.log(`Request received at ${new Date()}`);
     next();
 });
+
+app.use(cors());
+app.use(bodyParser.json());
 
 app.use('/public/assets', express.static(path.join(__dirname, 'public', 'assets')));
 
@@ -35,7 +40,7 @@ function verifyToken(req, res, next) {
                 next();
             });
         } catch (err) {
-            console.log(e.message); //error message here
+            console.log(err.message); //error message here
             res.status(401).json({ message: "Not authorized" });
         }
     } else (
