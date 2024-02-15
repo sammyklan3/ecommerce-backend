@@ -1,5 +1,7 @@
 const express = require('express');
 const router = express.Router();
+const upload = require("../modules/upload");
+const { verifyToken } = require("../modules/middleware");
 
 const { signup, login} = require("../controllers/authController");
 const home = require("../controllers/homeController");
@@ -17,7 +19,7 @@ router.post("/login", login);
 router.get("/orders", getOrders);
 
 // Products routes
-router.post("/createProducts", createProduct);
+router.post("/createProducts", upload.array("images", 5), verifyToken, createProduct);
 router.get("/product/:ProductID", getProduct);
 router.get("/products", getProducts);
 router.delete("/products/:productId", deleteProduct);

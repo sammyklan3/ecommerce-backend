@@ -1,4 +1,5 @@
 const db = require('../modules/db');
+
 const { generateRandomAlphanumericId } = require("../modules/middleware");
 
 const createProduct = async (req, res) => {
@@ -10,76 +11,102 @@ const createProduct = async (req, res) => {
         // Parse incoming request body for product data
         const { name, description, price, category, stockquantity, model, manufacturer } = req.body;
 
-        // Check if the product already exists in the database
-        const productExistsQuery = `SELECT COUNT(*) AS count FROM products WHERE Name = ?`;
-        db.query(productExistsQuery, [name], (err, result) => {
-            if (err) {
-                console.error("Database error:", err);
-                return res.status(500).json({ success: false, error: "Internal Server Error" });
-            }
+        if (!name) {
+            return res.status(400).json({ success: false, error: "Name cannot be empty" });
+        } else if (!description) {
+            return res.status(400).json({ success: false, error: "Description cannot be empty" });
+        } else if (!price) {
+            return res.status(400).json({ success: false, error: "Price cannot be empty" });
+        } else if (!category) {
+            return res.status(400).json({ success: false, error: "Category cannot be empty" });
+        } else if (!stockquantity) {
+            return res.status(400).json({ success: false, error: "Stock quantity cannot be empty" });
+        } else if (!model) {
+            return res.status(400).json({ success: false, error: "Model cannot be empty" });
+        } else if (!manufacturer) {
+            return res.status(400).json({ success: false, error: "Manufacturer cannot be empty" });
+        } else {
 
-            const productCount = result[0].count;
-            if (productCount > 0) {
-                // Product already exists, return error response
-                return res.status(400).json({ success: false, error: "Product already exists" });
-            }
 
-            // Get current date and time
-            const currentDate = new Date();
-            // Format date and time as per your database requirements
-            const formattedDate = currentDate.toISOString().slice(0, 19).replace('T', ' ');
 
-            // Insert product data into products table
-            const productInsertQuery = `
-                INSERT INTO products (ProductID, Name, Description, Price, Category, StockQuantity, Model, Manufacturer, date_uploaded)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-            `;
-
-            // Inserting product details in the database
-            db.query(productInsertQuery, [newId, name, description, price, category, stockquantity, model, manufacturer, formattedDate], (err, productResult) => {
+            // Check if the product already exists in the database
+            const productExistsQuery = `SELECT COUNT(*) AS count FROM products WHERE Name = ?`;
+            db.query(productExistsQuery, [name], (err, result) => {
                 if (err) {
                     console.error("Database error:", err);
                     return res.status(500).json({ success: false, error: "Internal Server Error" });
                 }
 
-                // Retrieve auto generated id
-                const productId = newId;
+                const productCount = result[0].count;
+                if (productCount > 0) {
+                    // Product already exists, return error response
+                    return res.status(400).json({ success: false, error: "Product already exists" });
+                }
 
-                const imageNames = req.files.map(file => file.filename);
+                // Get current date and time
+                const currentDate = new Date();
+                // Format date and time as per your database requirements
+                const formattedDate = currentDate.toISOString().slice(0, 19).replace('T', ' ');
 
-                // Insert image names into the database
-                const imageInsertQuery = `INSERT INTO product_images (ProductID, URL) VALUES (?, ?)`;
+                // Insert product data into products table
+                const productInsertQuery = `
+                INSERT INTO products (ProductID, Name, Description, Price, Category, StockQuantity, Model, Manufacturer, date_uploaded)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            `;
 
-                // Use a loop or Promise.all to ensure all image insertions are completed before sending response
-                const insertPromises = imageNames.map(imageName => {
-                    return new Promise((resolve, reject) => {
-                        db.query(imageInsertQuery, [productId, imageName], (err, imageResult) => {
-                            if (err) {
-                                console.error("Database error:", err);
-                                reject(err);
-                            } else {
-                                resolve();
-                            }
+                if (!req.files) {
+                    return res.status(400).json({ success: false, error: "Images not provided" });
+                } else if (req.files.length < 5) {
+                    return res.status(400).json({ success: false, error: "Minimum 5 images required" });
+                } else {
+                    // Inserting product details in the database
+                    db.query(productInsertQuery, [newId, name, description, price, category, stockquantity, model, manufacturer, formattedDate], (err, productResult) => {
+                        if (err) {
+                            console.error("Database error:", err);
+                            return res.status(500).json({ success: false, error: "Internal Server Error" });
+                        }
+
+                        // Retrieve auto generated id
+                        const productId = newId;
+
+                        const imageNames = req.files.map(file => file.filename);
+
+                        // Insert image names into the database
+                        const imageInsertQuery = `INSERT INTO product_images (ProductID, URL) VALUES (?, ?)`;
+
+                        // Use a loop or Promise.all to ensure all image insertions are completed before sending response
+                        const insertPromises = imageNames.map(imageName => {
+                            return new Promise((resolve, reject) => {
+                                db.query(imageInsertQuery, [productId, imageName], (err, imageResult) => {
+                                    if (err) {
+                                        console.error("Database error:", err);
+                                        reject(err);
+                                    } else {
+                                        resolve();
+                                    }
+                                });
+                            });
                         });
-                    });
-                });
 
-                Promise.all(insertPromises)
-                    .then(() => {
-                        console.log('Product and images uploaded successfully.');
-                        res.status(200).send('Product and images uploaded successfully.');
-                    })
-                    .catch(error => {
-                        console.error("Error inserting image data:", error);
-                        res.status(500).json({ success: false, error: "Internal Server Error" });
+                        Promise.all(insertPromises)
+                            .then(() => {
+                                console.log('Product and images uploaded successfully.');
+                                res.status(200).send('Product and images uploaded successfully.');
+                            })
+                            .catch(error => {
+                                console.error("Error inserting image data:", error);
+                                res.status(500).json({ success: false, error: "Internal Server Error" });
+                            });
                     });
+                };
             });
-        });
+        }
     } catch (error) {
         // Handle errors
         console.error('Error adding product:', error);
         res.status(500).json({ error: 'Internal server error' });
     }
+
 };
 
 const getProduct = async (req, res) => {

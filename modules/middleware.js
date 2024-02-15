@@ -16,7 +16,8 @@ app.use((req, res, next) => {
 app.use(cors());
 app.use(bodyParser.json());
 
-app.use('/public/assets', express.static(path.join(__dirname, 'public', 'assets')));
+// Serve static files from the '/public/assets' directory
+app.use('/public/assets', express.static(path.join(__dirname, '../public/assets/')));
 
 // Middleware to verify JWT
 function verifyToken(req, res, next) {
