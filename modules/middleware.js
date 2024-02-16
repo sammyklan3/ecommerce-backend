@@ -1,5 +1,6 @@
 // middleware.js
 const express = require('express');
+const compression = require('compression');
 const path = require('path');
 const jwt = require('jsonwebtoken');
 require('dotenv').config();
@@ -13,11 +14,28 @@ app.use((req, res, next) => {
     next();
 });
 
+// Use compression middleware with configuration
+app.use(compression({
+    threshold: 10240, // Compress all responses that are at least 10KB in size (default is 1KB)
+    level: 6,         // Compression level (0-9), where 0 is no compression and 9 is maximum compression (default is -1, which uses zlib's default level)
+    memLevel: 8,      // Memory level (1-9) to balance memory usage and compression speed (default is 8)
+    chunkSize: 16384, // Chunk size (16KB by default), controls the size of internal buffering
+    filter: (req, res) => {
+      if (req.headers['x-no-compression']) {
+        // Don't compress responses if requested by the client
+        return false;
+      }
+  
+      // Compress all other responses
+      return compression.filter(req, res);
+    }
+  }));
+
 app.use(cors());
 app.use(bodyParser.json());
 
 // Serve static files from the '/public/assets' directory
-app.use('/public/assets', express.static(path.join(__dirname, '../public/assets/')));
+app.use('/public/', express.static(path.join(__dirname, '../public/')));
 
 // Middleware to verify JWT
 function verifyToken(req, res, next) {

@@ -22,6 +22,6 @@ router.get("/orders", getOrders);
 router.post("/createProducts", upload.array("images", 5), verifyToken, createProduct);
 router.get("/product/:ProductID", getProduct);
 router.get("/products", getProducts);
-router.delete("/products/:productId", deleteProduct);
+router.delete("/product/:productId", deleteProduct);
 
 module.exports = router;

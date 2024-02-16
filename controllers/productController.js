@@ -1,4 +1,6 @@
 const db = require('../modules/db');
+const path = require('path');
+const fs = require("fs");
 
 const { generateRandomAlphanumericId } = require("../modules/middleware");
 
@@ -171,6 +173,7 @@ const getProduct = async (req, res) => {
     });
 };
 
+// Get products controller
 const getProducts = async (req, res) => {
     // Get products logic
     const sql = `
@@ -207,50 +210,73 @@ const getProducts = async (req, res) => {
     });
 };
 
+// Delete product controller
 const deleteProduct = async (req, res) => {
-    // Delete product logic
-    const productId = req.params.productId;
-
-    // Query to fetch image URLs related to the product
-    const getImageUrlsQuery = 'SELECT URL FROM product_images WHERE ProductID = ?';
-
-    db.query(getImageUrlsQuery, [productId], (err, imageResults) => {
-        if (err) {
-            console.error('Error fetching image URLs:', err);
-            res.status(500).json({ error: 'Internal Server Error' });
+    try {
+        if (!req.params.productId) {
+            res.status(404).json({ success: false, error: "No product Id has been provided" });
             return;
         }
+        
+        const productId = req.params.productId;
 
-        // Extract image URLs from the query results
-        const imageUrls = imageResults.map(image => image.URL);
+        // Query to check if the product exists
+        const getProductQuery = 'SELECT * FROM products WHERE ProductID = ?';
 
-        // Query to delete product record from the database
-        const deleteProductQuery = 'DELETE FROM products WHERE ProductID = ?';
-
-        db.query(deleteProductQuery, [productId], (err, productDeleteResult) => {
+        db.query(getProductQuery, [productId], (err, productResults) => {
             if (err) {
-                console.error('Error deleting product:', err);
+                console.error('Error checking product existence:', err);
                 res.status(500).json({ error: 'Internal Server Error' });
                 return;
-            } else if (productDeleteResult.length === 0) {
-                res.status(404).json({ success: flase, error: "The products is not available." });
+            } else if (productResults.length === 0) {
+                res.status(404).json({ success: false, error: "The product is not available." });
+                return;
             }
 
-            // Delete image files from the /assets/products/ folder
-            imageUrls.forEach(imageUrl => {
-                const imagePath = path.join(__dirname, 'public', 'assets', imageUrl);
-                fs.unlink(imagePath, (err) => {
+            // Query to fetch image URLs related to the product
+            const getImageUrlsQuery = 'SELECT URL FROM product_images WHERE ProductID = ?';
+
+            db.query(getImageUrlsQuery, [productId], (err, imageResults) => {
+                if (err) {
+                    console.error('Error fetching image URLs:', err);
+                    res.status(500).json({ error: 'Internal Server Error' });
+                    return;
+                }
+
+                // Extract image URLs from the query results
+                const imageUrls = imageResults.map(image => image.URL);
+
+                // Query to delete product record from the database
+                const deleteProductQuery = 'DELETE FROM products WHERE ProductID = ?';
+
+                db.query(deleteProductQuery, [productId], (err, productDeleteResult) => {
                     if (err) {
-                        console.error('Error deleting image file:', err);
-                    } else {
-                        console.log('Image file deleted successfully:', imagePath);
+                        console.error('Error deleting product:', err);
+                        res.status(500).json({ error: 'Internal Server Error' });
+                        return;
                     }
+
+                    // Delete image files from the /assets/products/ folder
+                    imageUrls.forEach(imageUrl => {
+                        const imagePath = path.join(__dirname, "../public/assets/", imageUrl);
+                        fs.unlink(imagePath, (err) => {
+                            if (err) {
+                                console.error('Error deleting image file:', err);
+                            } else {
+                                console.log('Image file deleted successfully:', imagePath);
+                            }
+                        });
+                    });
+
+                    res.status(204).send(); // 204 No Content - successful deletion
                 });
             });
-
-            res.status(204).send(); // 204 No Content - successful deletion
         });
-    });
+    } catch (error) {
+        console.error('Error deleting product:', error);
+        res.status(500).json({ error: 'Internal Server Error' });
+    }
 };
+
 
 module.exports = { createProduct, getProduct, getProducts, deleteProduct };
