@@ -24,7 +24,7 @@ const getBanners = async (req, res) => {
                 bannerItem.ImageName = `${protocol}://${host}/public/assets/${bannerItem.ImageName}`;
             });
 
-            res.status(200).json({ success: true, result });
+            res.status(200).json({ success: true, result});
 
         });
     } catch (err) {
