@@ -29,8 +29,6 @@ const createProduct = async (req, res) => {
             return res.status(400).json({ success: false, error: "Manufacturer cannot be empty" });
         } else {
 
-
-
             // Check if the product already exists in the database
             const productExistsQuery = `SELECT COUNT(*) AS count FROM products WHERE Name = ?`;
             db.query(productExistsQuery, [name], (err, result) => {

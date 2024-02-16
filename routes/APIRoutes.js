@@ -7,6 +7,7 @@ const { signup, login} = require("../controllers/authController");
 const { getUser, getUsers } = require("../controllers/usersController");
 const home = require("../controllers/homeController");
 const { getOrders } = require("../controllers/ordersController");
+const { insertBanner, getBanners, deleteBanner } = require("../controllers/bannerController");
 const { createProduct, getProduct, getProducts, deleteProduct } = require("../controllers/productController");
 
 // Home route
@@ -28,5 +29,10 @@ router.delete("/product/:productId", deleteProduct);
 // Users routes
 router.get("/users", getUsers);
 router.get("/user/:username", getUser);
+
+// Banners routes
+router.get("/banners", getBanners);
+router.post("/banners", upload.single("image"), insertBanner);
+router.delete("/banners/:bannerId", deleteBanner);
 
 module.exports = router;
