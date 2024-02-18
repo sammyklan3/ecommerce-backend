@@ -13,12 +13,12 @@ const getBanners = async (req, res) => {
         const result = await pool.request().query(getBannersQuery);
 
         if (result.recordset.length === 0) {
-            return res.status(400).json({ success: false, error: "There are no banners" });
+            return res.status(404).json({ success: false, error: "There are no banners" });
         }
+
         // Get the host address dynamically
         const host = req.get('host');
         const protocol = req.protocol;
-            res.status(200).json({ success: true, result });
 
         const banners = result.recordset.map(bannerItem => ({
             ...bannerItem,
@@ -34,25 +34,14 @@ const getBanners = async (req, res) => {
 
 const insertBanner = async (req, res) => {
     try {
-        // Check if request contains file
-        if (!req.file) {
-            return res.status(400).json({ success: false, error: "No image uploaded" });
-        } else if (!req.body.link) {
-            return res.status(400).json({ success: false, error: "Link cannot be empty" });
-        } else if (!req.body.endDate) {
-            return res.status(400).json({ success: false, error: "End date cannot be empty" });
-        } else if (!req.body.productId) {
-            return res.status(400).json({ success: false, error: "Product Id cannot be empty" });
+        if (!req.file || !req.body.link || !req.body.endDate || !req.body.productId) {
+            return res.status(400).json({ success: false, error: "Missing required fields" });
         }
 
         const { link, endDate, priority, productId } = req.body;
 
-        // Banner ID generation creation logic
-        const newId = generateRandomAlphanumericId(9);
-
         const pool = await poolPromise;
 
-        // Check if a banner already exists for the given product ID
         const bannerExistsQuery = "SELECT * FROM banners WHERE ProductID = @productId";
         const bannerExistsResult = await pool.request()
             .input('productId', sql.VarChar, productId)
@@ -62,8 +51,9 @@ const insertBanner = async (req, res) => {
             return res.status(400).json({ success: false, error: "A banner already exists for this product" });
         }
 
-        // Format end date as a SQL Server date string (YYYY-MM-DD HH:MM:SS)
         const formattedEndDate = new Date(endDate).toISOString().slice(0, 19).replace('T', ' ');
+
+        const newId = generateRandomAlphanumericId(9);
 
         const insertBannerQuery = `
             INSERT INTO banners (BannerID, ImageName, Link, StartDate, EndDate, Priority, ProductID) 
@@ -92,7 +82,6 @@ const deleteBanner = async (req, res) => {
 
         const pool = await poolPromise;
 
-        // Get the image name associated with the banner from the database
         const getImageNameQuery = "SELECT ImageName FROM banners WHERE BannerID = @bannerId";
         const imageNameResult = await pool.request()
             .input('bannerId', sql.VarChar, bannerId)
@@ -104,13 +93,11 @@ const deleteBanner = async (req, res) => {
 
         const imageName = imageNameResult.recordset[0].ImageName;
 
-        // Delete the banner record from the database
         const deleteBannerQuery = "DELETE FROM banners WHERE BannerID = @bannerId";
         await pool.request()
             .input('bannerId', sql.VarChar, bannerId)
             .query(deleteBannerQuery);
 
-        // Delete the associated image file from the server
         const imagePath = path.join(__dirname, "../public/assets/", imageName);
         fs.unlink(imagePath, (err) => {
             if (err) {
