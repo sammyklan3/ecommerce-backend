@@ -1,15 +1,12 @@
-const { poolPromise } = require('../modules/db');
+const db = require('../modules/db');
 
 // Get all users controller
 const getUsers = async (req, res) => {
     try {
-        const pool = await poolPromise;
-
         const getUserQuery = "SELECT UserID, Username, Email, profile_image, date_created FROM users";
+        const result = await db.query(getUserQuery);
 
-        const result = await pool.request().query(getUserQuery);
-
-        if (result.recordset.length === 0) {
+        if (result.length === 0) {
             return res.status(404).json({ success: false, error: "There are no registered users" });
         }
 
@@ -17,7 +14,7 @@ const getUsers = async (req, res) => {
         const host = req.get('host');
         const protocol = req.protocol;
 
-        const users = result.recordset.map(user => ({
+        const users = result.map(user => ({
             ...user,
             profile_image: `${protocol}://${host}/public/assets/${user.profile_image}`
         }));
@@ -32,8 +29,6 @@ const getUsers = async (req, res) => {
 // Get specific user using specified username controller
 const getUser = async (req, res) => {
     try {
-        const pool = await poolPromise;
-
         if (!req.params.username) {
             return res.status(404).json({ success: false, message: "Please enter a username" });
         }
@@ -41,11 +36,9 @@ const getUser = async (req, res) => {
         const username = req.params.username;
         const getUserQuery = "SELECT UserID, Username, Email, profile_image, date_created FROM users WHERE username = @username";
 
-        const result = await pool.request()
-            .input('username', username)
-            .query(getUserQuery);
+        const result = await db.query(getUserQuery, { username });
 
-        if (result.recordset.length === 0) {
+        if (result.length === 0) {
             return res.status(400).json({ success: false, error: "The user does not exist" });
         }
 
@@ -53,8 +46,8 @@ const getUser = async (req, res) => {
         const host = req.get('host');
         const protocol = req.protocol;
 
-        const profile_image = `${protocol}://${host}/public/assets/${result.recordset[0].profile_image}`;
-        const userWithProfileImage = { ...result.recordset[0], profile_image };
+        const profile_image = `${protocol}://${host}/public/assets/${result[0].profile_image}`;
+        const userWithProfileImage = { ...result[0], profile_image };
 
         res.status(200).json({ success: true, user: userWithProfileImage });
     } catch (err) {

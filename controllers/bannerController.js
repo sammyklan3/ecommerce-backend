@@ -1,18 +1,13 @@
-const sql = require('mssql');
+const db = require("../modules/db");
 const fs = require("fs");
 const path = require("path");
 const { generateRandomAlphanumericId } = require("../modules/middleware");
-const { poolPromise } = require("../modules/db");
 
 const getBanners = async (req, res) => {
     try {
-        const pool = await poolPromise;
+        const banners = await db.query("SELECT * FROM banners");
 
-        const getBannersQuery = "SELECT * FROM banners";
-
-        const result = await pool.request().query(getBannersQuery);
-
-        if (result.recordset.length === 0) {
+        if (banners.length === 0) {
             return res.status(404).json({ success: false, error: "There are no banners" });
         }
 
@@ -20,12 +15,12 @@ const getBanners = async (req, res) => {
         const host = req.get('host');
         const protocol = req.protocol;
 
-        const banners = result.recordset.map(bannerItem => ({
+        const formattedBanners = banners.map(bannerItem => ({
             ...bannerItem,
             ImageName: `${protocol}://${host}/public/assets/${bannerItem.ImageName}`
         }));
 
-        res.status(200).json({ success: true, banners });
+        res.status(200).json({ success: true, banners: formattedBanners });
     } catch (err) {
         console.error("Error getting the banners", err);
         res.status(500).json({ success: false, error: "Internal server error" });
@@ -40,14 +35,9 @@ const insertBanner = async (req, res) => {
 
         const { link, endDate, priority, productId } = req.body;
 
-        const pool = await poolPromise;
+        const bannerExists = await db.query("SELECT * FROM banners WHERE ProductID = @productId", { productId });
 
-        const bannerExistsQuery = "SELECT * FROM banners WHERE ProductID = @productId";
-        const bannerExistsResult = await pool.request()
-            .input('productId', sql.VarChar, productId)
-            .query(bannerExistsQuery);
-
-        if (bannerExistsResult.recordset.length > 0) {
+        if (bannerExists.length > 0) {
             return res.status(400).json({ success: false, error: "A banner already exists for this product" });
         }
 
@@ -60,14 +50,14 @@ const insertBanner = async (req, res) => {
             VALUES (@newId, @imageName, @link, GETDATE(), @formattedEndDate, @priority, @productId)
         `;
 
-        await pool.request()
-            .input('newId', sql.VarChar, newId)
-            .input('imageName', sql.VarChar, req.file.filename)
-            .input('link', sql.VarChar, link)
-            .input('formattedEndDate', sql.DateTime, formattedEndDate)
-            .input('priority', sql.Int, priority)
-            .input('productId', sql.VarChar, productId)
-            .query(insertBannerQuery);
+        await db.query(insertBannerQuery, {
+            newId,
+            imageName: req.file.filename,
+            link,
+            formattedEndDate,
+            priority,
+            productId
+        });
 
         res.status(201).json({ success: true, message: "Banner inserted successfully" });
     } catch (err) {
@@ -80,23 +70,15 @@ const deleteBanner = async (req, res) => {
     try {
         const bannerId = req.params.bannerId;
 
-        const pool = await poolPromise;
+        const imageNameResult = await db.query("SELECT ImageName FROM banners WHERE BannerID = @bannerId", { bannerId });
 
-        const getImageNameQuery = "SELECT ImageName FROM banners WHERE BannerID = @bannerId";
-        const imageNameResult = await pool.request()
-            .input('bannerId', sql.VarChar, bannerId)
-            .query(getImageNameQuery);
-
-        if (imageNameResult.recordset.length === 0) {
+        if (imageNameResult.length === 0) {
             return res.status(404).json({ success: false, error: "Banner not found" });
         }
 
-        const imageName = imageNameResult.recordset[0].ImageName;
+        const imageName = imageNameResult[0].ImageName;
 
-        const deleteBannerQuery = "DELETE FROM banners WHERE BannerID = @bannerId";
-        await pool.request()
-            .input('bannerId', sql.VarChar, bannerId)
-            .query(deleteBannerQuery);
+        await db.query("DELETE FROM banners WHERE BannerID = @bannerId", { bannerId });
 
         const imagePath = path.join(__dirname, "../public/assets/", imageName);
         fs.unlink(imagePath, (err) => {

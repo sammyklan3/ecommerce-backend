@@ -1,18 +1,13 @@
-const sql = require('mssql');
+const db = require('../modules/db');
+const fs = require('fs');
 const path = require('path');
-const fs = require("fs");
-
 const { generateRandomAlphanumericId } = require("../modules/middleware");
-const { poolPromise } = require('../modules/db');
 
 const createProduct = async (req, res) => {
-
     // Product creation logic
     const newId = generateRandomAlphanumericId(9);
 
     try {
-        const pool = await poolPromise;
-        
         // Parse incoming request body for product data
         const { name, description, price, category, stockquantity, model, manufacturer } = req.body;
 
@@ -22,12 +17,9 @@ const createProduct = async (req, res) => {
 
         // Check if the product already exists in the database
         const productExistsQuery = `SELECT COUNT(*) AS count FROM products WHERE Name = @name`;
-        const productExistsResult = await pool.request()
-            .input('name', sql.NVarChar, name)
-            .query(productExistsQuery);
+        const productCount = await db.query(productExistsQuery, { name });
 
-        const productCount = productExistsResult.recordset[0].count;
-        if (productCount > 0) {
+        if (productCount[0].count > 0) {
             // Product already exists, return error response
             return res.status(400).json({ success: false, error: "Product already exists" });
         }
@@ -43,17 +35,17 @@ const createProduct = async (req, res) => {
             VALUES (@newId, @name, @description, @price, @category, @stockquantity, @model, @manufacturer, @formattedDate)
         `;
 
-        await pool.request()
-            .input('newId', sql.NVarChar, newId)
-            .input('name', sql.NVarChar, name)
-            .input('description', sql.NVarChar, description)
-            .input('price', sql.Decimal, price)
-            .input('category', sql.NVarChar, category)
-            .input('stockquantity', sql.Int, stockquantity)
-            .input('model', sql.NVarChar, model)
-            .input('manufacturer', sql.NVarChar, manufacturer)
-            .input('formattedDate', sql.NVarChar, formattedDate)
-            .query(productInsertQuery);
+        await db.query(productInsertQuery, {
+            newId,
+            name,
+            description,
+            price,
+            category,
+            stockquantity,
+            model,
+            manufacturer,
+            formattedDate
+        });
 
         // Retrieve auto-generated product ID
         const productId = newId;
@@ -67,38 +59,19 @@ const createProduct = async (req, res) => {
 
         // Use Promise.all to ensure all image insertions are completed before sending the response
         const insertPromises = req.files.map(file => {
-            return new Promise((resolve, reject) => {
-                pool.request()
-                    .input('productId', sql.NVarChar, productId)
-                    .input('filename', sql.NVarChar, file.filename)
-                    .query(imageInsertQuery, (err, result) => {
-                        if (err) {
-                            console.error("Database error:", err);
-                            reject(err);
-                        } else {
-                            resolve();
-                        }
-                    });
-            });
+            return db.query(imageInsertQuery, { productId, filename: file.filename });
         });
 
-        Promise.all(insertPromises)
-            .then(() => {
-                console.log('Product and images uploaded successfully.');
-                res.status(200).send('Product and images uploaded successfully.');
-            })
-            .catch(error => {
-                console.error("Error inserting image data:", error);
-                res.status(500).json({ success: false, error: "Internal Server Error" });
-            });
+        await Promise.all(insertPromises);
+
+        console.log('Product and images uploaded successfully.');
+        res.status(200).send('Product and images uploaded successfully.');
     } catch (error) {
         // Handle errors
         console.error('Error adding product:', error);
         res.status(500).json({ error: 'Internal server error' });
     }
 };
-
-
 
 const getProduct = async (req, res) => {
     // Get product logic
@@ -110,37 +83,29 @@ const getProduct = async (req, res) => {
     }
 
     try {
-        const pool = await poolPromise;
-
         const getProductQuery = "SELECT * FROM products WHERE ProductID = @productID";
         const getProductImagesQuery = "SELECT URL FROM product_images WHERE ProductID = @productID";
         const getReviews = "SELECT reviews.*, users.username, users.profile_image FROM reviews INNER JOIN users ON reviews.UserID = users.UserID WHERE reviews.ProductID = @productID";
 
-        const productResult = await pool.request()
-            .input('productID', sql.VarChar, productID)
-            .query(getProductQuery);
+        const productResult = await db.query(getProductQuery, { productID });
 
-        if (productResult.recordset.length === 0) {
+        if (productResult.length === 0) {
             return res.status(404).json({ success: false, error: "Product not found" });
         }
 
-        const product = productResult.recordset[0];
+        const product = productResult[0];
 
-        const imagesResult = await pool.request()
-            .input('productID', sql.VarChar, productID)
-            .query(getProductImagesQuery);
+        const imagesResult = await db.query(getProductImagesQuery, { productID });
 
         const host = req.get('host');
         const protocol = req.protocol;
 
         // Construct full image URLs
-        const images = imagesResult.recordset.map(image => `${protocol}://${host}/public/assets/${image.URL}`);
+        const images = imagesResult.map(image => `${protocol}://${host}/public/assets/${image.URL}`);
 
-        const reviewsResult = await pool.request()
-            .input('productID', sql.VarChar, productID)
-            .query(getReviews);
+        const reviewsResult = await db.query(getReviews, { productID });
 
-        const reviews = reviewsResult.recordset.map(review => {
+        const reviews = reviewsResult.map(review => {
             review.profile_image = `${protocol}://${host}/public/assets/${review.profile_image}`;
             return review;
         });
@@ -157,17 +122,15 @@ const getProduct = async (req, res) => {
 
 const getProducts = async (req, res) => {
     try {
-        const pool = await poolPromise;
-
         const sqlQuery = `
             SELECT p.*, 
                 (SELECT TOP 1 pi.URL FROM product_images pi WHERE pi.ProductID = p.ProductID) AS ImageURL
             FROM products p
         `;
 
-        const result = await pool.request().query(sqlQuery);
+        const result = await db.query(sqlQuery);
 
-        if (result.recordset.length === 0) {
+        if (result.length === 0) {
             return res.status(404).json({ success: false, error: "There are no products available" });
         }
 
@@ -176,7 +139,7 @@ const getProducts = async (req, res) => {
         const protocol = req.protocol;
 
         // Add the protocol and host to each image URL
-        const products = result.recordset.map(product => ({
+        const products = result.map(product => ({
             ...product,
             ImageURL: `${protocol}://${host}/public/assets/${product.ImageURL}`
         }));
@@ -188,11 +151,8 @@ const getProducts = async (req, res) => {
     }
 };
 
-
 const deleteProduct = async (req, res) => {
     try {
-        const pool = await poolPromise;
-
         if (!req.params.productId) {
             return res.status(404).json({ success: false, error: "No product Id has been provided" });
         }
@@ -202,30 +162,24 @@ const deleteProduct = async (req, res) => {
         // Query to check if the product exists
         const getProductQuery = 'SELECT * FROM products WHERE ProductID = @productId';
 
-        const productResults = await pool.request()
-            .input('productId', sql.VarChar, productId)
-            .query(getProductQuery);
+        const productResults = await db.query(getProductQuery, { productId });
 
-        if (productResults.recordset.length === 0) {
+        if (productResults.length === 0) {
             return res.status(404).json({ success: false, error: "The product is not available." });
         }
 
         // Query to fetch image URLs related to the product
         const getImageUrlsQuery = 'SELECT URL FROM product_images WHERE ProductID = @productId';
 
-        const imageResults = await pool.request()
-            .input('productId', sql.VarChar, productId)
-            .query(getImageUrlsQuery);
+        const imageResults = await db.query(getImageUrlsQuery, { productId });
 
         // Extract image URLs from the query results
-        const imageUrls = imageResults.recordset.map(image => image.URL);
+        const imageUrls = imageResults.map(image => image.URL);
 
         // Query to delete product record from the database
         const deleteProductQuery = 'DELETE FROM products WHERE ProductID = @productId';
 
-        await pool.request()
-            .input('productId', sql.VarChar, productId)
-            .query(deleteProductQuery);
+        await db.query(deleteProductQuery, { productId });
 
         // Delete image files from the /assets/products/ folder
         imageUrls.forEach(imageUrl => {
