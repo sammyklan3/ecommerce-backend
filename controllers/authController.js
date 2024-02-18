@@ -10,8 +10,6 @@ const signup = async (req, res) => {
     // Signup logic
     const { username, password } = req.body;
 
-    const UserType = "user";
-
     if (!username || !password) {
         return res.status(400).json({ success: false, message: "Username and password are required" });
     }
@@ -26,13 +24,12 @@ const signup = async (req, res) => {
         }
 
         const newId = generateRandomAlphanumericId(9); // Assuming you have a function to generate random IDs
-        const sqlQuery = "INSERT INTO users (UserID, Username, Password, UserType) VALUES (@newId, @username, @password, @UserType)";
+        const sqlQuery = "INSERT INTO users (UserID, Username, Password, date_created) VALUES (@newId, @username, @password, GETDATE())";
 
-        await query(sqlQuery, {
+        await db.query(sqlQuery, {
             newId,
             username,
             password: hashedPassword,
-            UserType
         });
 
         res.status(200).json({ success: true, message: "Account successfully created" });
