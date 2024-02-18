@@ -2,6 +2,8 @@ const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
 const db = require('../modules/db');
 require('dotenv').config();
+const { generateRandomAlphanumericId } = require("../modules/middleware");
+
 
 const secret = process.env.JWT_SECRET;
 
