@@ -21,7 +21,7 @@ router.post("/login", login);
 router.get("/orders", getOrders);
 
 // Products routes
-router.post("/createProducts", upload.array("images", 5), verifyToken, createProduct);
+router.post("/createProducts", upload.array("images", 5), createProduct);
 router.get("/product/:ProductID", getProduct);
 router.get("/products", getProducts);
 router.delete("/product/:productId", deleteProduct);

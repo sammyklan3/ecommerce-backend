@@ -1,11 +1,13 @@
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
-const db = require('../modules/db');
+const { poolPromise } = require('../modules/db');
+const sql = require('mssql');
+const { generateRandomAlphanumericId } = require("../modules/middleware");
 require('dotenv').config();
 
 const secret = process.env.JWT_SECRET;
 
-const signup = async(req, res) => {
+const signup = async (req, res) => {
     // Signup logic
     const { username, password } = req.body;
 
@@ -16,18 +18,27 @@ const signup = async(req, res) => {
     }
 
     try {
-        const hashedPassword = await bcrypt.hash(password, saltRounds);
+        const hashedPassword = await bcrypt.hash(password, 10); // Using 10 salt rounds
 
-        const [existingUser] = await db.promise().query("SELECT * FROM users WHERE username = ?", [username]);
+        const pool = await poolPromise;
 
-        if (existingUser.length > 0) {
+        const existingUser = await pool.request()
+            .input('username', sql.NVarChar, username)
+            .query("SELECT * FROM users WHERE username = @username");
+
+        if (existingUser.recordset.length > 0) {
             return res.status(400).json({ success: false, error: "This user already exists" });
         }
 
-        const newId = generateRandomAlphanumericId(9);
-        const sql = "INSERT INTO users (UserID, username, password, UserType) VALUES (?, ?, ?, ?)";
+        const newId = generateRandomAlphanumericId(9); // Assuming you have a function to generate random IDs
+        const sqlQuery = "INSERT INTO users (UserID, username, password, UserType) VALUES (@newId, @username, @password, @UserType)";
 
-        await db.promise().query(sql, [newId, username, hashedPassword, UserType]);
+        await pool.request()
+            .input('newId', sql.NVarChar, newId)
+            .input('username', sql.NVarChar, username)
+            .input('password', sql.NVarChar, hashedPassword)
+            .input('UserType', sql.NVarChar, UserType)
+            .query(sqlQuery);
 
         res.status(200).json({ success: true, message: "Account successfully created" });
     } catch (error) {
@@ -36,7 +47,7 @@ const signup = async(req, res) => {
     }
 };
 
-const login = async(req, res) => {
+const login = async (req, res) => {
     // Login logic
     const { username, password } = req.body;
 
@@ -45,20 +56,24 @@ const login = async(req, res) => {
     }
 
     try {
-        const [user] = await db.promise().query("SELECT * FROM users WHERE username = ?", [username]);
+        const pool = await poolPromise;
 
-        if (user.length === 0) {
+        const user = await pool.request()
+            .input('username', sql.NVarChar, username)
+            .query("SELECT * FROM users WHERE username = @username");
+
+        if (user.recordset.length === 0) {
             return res.status(400).json({ success: false, error: "Username or Password is incorrect" });
         }
 
-        const match = await bcrypt.compare(password, user[0].Password);
+        const match = await bcrypt.compare(password, user.recordset[0].Password);
 
         if (!match) {
             return res.status(400).json({ success: false, error: "Username or Password is incorrect" });
         }
 
         // Generate JWT
-        const token = jwt.sign({ username: username, }, secret, { expiresIn: '1h' });
+        const token = jwt.sign({ username: username }, secret, { expiresIn: '1h' });
 
         res.status(200).json({ success: true, message: "Successfully logged in", token });
     } catch (error) {
@@ -67,4 +82,4 @@ const login = async(req, res) => {
     }
 };
 
-module.exports =  { signup, login};
+module.exports = { signup, login };

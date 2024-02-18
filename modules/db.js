@@ -1,27 +1,35 @@
 // db.js
 require('dotenv').config();
 
-const mysql = require("mysql2");
+const sql = require("mssql");
 
-const db = mysql.createPool({
-    host: process.env.DB_HOST,
-    user: process.env.DB_USER,
-    password: process.env.DB_PASS,
-    database: process.env.DB_NAME,
-    port: process.env.DB_PORT,
-    connectionLimit: 10,
-    waitForConnections: true,
-    queueLimit: 0,
-});
+const server = process.env.AZURE_SQL_SERVER;
+const database = process.env.AZURE_SQL_DATABASE;
+const port = parseInt(process.env.AZURE_SQL_PORT);
+const user = process.env.AZURE_SQL_USER;
+const password = process.env.AZURE_SQL_PASSWORD;
 
-// Test the database connection
-db.getConnection((err, connection) => {
-    if (err) {
-      console.error('Database connection failed: ', err.message);
-    } else {
-      console.log('Database connection successful!');
-      connection.release(); // Release the connection when done
-    }
-  });
+const config = {
+  server,
+  port,
+  database,
+  user,
+  password,
+  authentication: {
+    type: 'default'
+  },
 
-module.exports = db;
+  options: {
+      encrypt: true
+  }
+};
+
+const poolPromise = new sql.ConnectionPool(config)
+    .connect()
+    .then(pool => {
+        console.log('Connected to MSSQL');
+        return pool;
+    })
+    .catch(err => console.log('Database Connection Failed! Bad Config: ', err));
+
+module.exports = { poolPromise };

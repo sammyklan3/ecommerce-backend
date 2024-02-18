@@ -32,7 +32,7 @@ app.use(compression({
   }));
 
 app.use(cors());
-app.use(bodyParser.json());
+app.use(bodyParser.urlencoded({ extended: true }));
 
 // Serve static files from the '/public/assets' directory
 app.use('/public/', express.static(path.join(__dirname, '../public/')));
