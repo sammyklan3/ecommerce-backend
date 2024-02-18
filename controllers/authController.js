@@ -19,7 +19,7 @@ const signup = async (req, res) => {
     try {
         const hashedPassword = await bcrypt.hash(password, 10); // Using 10 salt rounds
 
-        const existingUser = await db.query("SELECT * FROM users WHERE username = @username", { username });
+        const existingUser = await db.query("SELECT * FROM users WHERE Username = @username", { username });
 
         if (existingUser.length > 0) {
             return res.status(400).json({ success: false, error: "This user already exists" });
@@ -51,7 +51,7 @@ const login = async (req, res) => {
     }
 
     try {
-        const user = await db.query("SELECT * FROM users WHERE username = @username", { username });
+        const user = await db.query("SELECT * FROM users WHERE Username = @username", { username });
 
         if (user.length === 0) {
             return res.status(400).json({ success: false, error: "Username or Password is incorrect" });
