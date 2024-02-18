@@ -4,6 +4,8 @@ const { poolPromise } = require('../modules/db');
 const sql = require('mssql');
 const { generateRandomAlphanumericId } = require("../modules/middleware");
 require('dotenv').config();
+const { generateRandomAlphanumericId } = require("../modules/middleware");
+
 
 const secret = process.env.JWT_SECRET;
 

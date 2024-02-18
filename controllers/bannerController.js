@@ -17,12 +17,16 @@ const getBanners = async (req, res) => {
         }
 
 <<<<<<< HEAD
+<<<<<<< HEAD
         // Get the host address dynamically
         const host = req.get('host');
         const protocol = req.protocol;
 =======
             res.status(200).json({ success: true, result });
 >>>>>>> 326bc6e (Reverting to mysql)
+=======
+            res.status(200).json({ success: true, result });
+>>>>>>> 18e03513e32217fad5fcf8ee35ea24a475e16cf4
 
         const banners = result.recordset.map(bannerItem => ({
             ...bannerItem,
