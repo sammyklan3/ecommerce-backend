@@ -26,7 +26,7 @@ const signup = async (req, res) => {
         }
 
         const newId = generateRandomAlphanumericId(9); // Assuming you have a function to generate random IDs
-        const sqlQuery = "INSERT INTO users (UserID, username, password, UserType) VALUES (@newId, @username, @password, @UserType)";
+        const sqlQuery = "INSERT INTO users (UserID, Username, Password, UserType) VALUES (@newId, @username, @password, @UserType)";
 
         await query(sqlQuery, {
             newId,
@@ -57,7 +57,7 @@ const login = async (req, res) => {
             return res.status(400).json({ success: false, error: "Username or Password is incorrect" });
         }
 
-        const match = await bcrypt.compare(password, user[0].password);
+        const match = await bcrypt.compare(password, user[0].Password);
 
         if (!match) {
             return res.status(400).json({ success: false, error: "Username or Password is incorrect" });
