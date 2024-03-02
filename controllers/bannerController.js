@@ -5,7 +5,7 @@ const { generateRandomAlphanumericId } = require("../modules/middleware");
 
 const getBanners = async (req, res) => {
     try {
-        const banners = await db.query("SELECT * FROM banners");
+        const [banners] = await db.promise().query("SELECT * FROM banners");
 
         if (banners.length === 0) {
             return res.status(404).json({ success: false, error: "There are no banners" });
@@ -35,7 +35,7 @@ const insertBanner = async (req, res) => {
 
         const { link, endDate, priority, productId } = req.body;
 
-        const bannerExists = await db.query("SELECT * FROM banners WHERE ProductID = @productId", { productId });
+        const [bannerExists] = await db.promise().query("SELECT * FROM banners WHERE ProductID = ?", [productId]);
 
         if (bannerExists.length > 0) {
             return res.status(400).json({ success: false, error: "A banner already exists for this product" });
@@ -47,17 +47,10 @@ const insertBanner = async (req, res) => {
 
         const insertBannerQuery = `
             INSERT INTO banners (BannerID, ImageName, Link, StartDate, EndDate, Priority, ProductID) 
-            VALUES (@newId, @imageName, @link, GETDATE(), @formattedEndDate, @priority, @productId)
+            VALUES (?, ?, ?, NOW(), ?, ?, ?)
         `;
 
-        await db.query(insertBannerQuery, {
-            newId,
-            imageName: req.file.filename,
-            link,
-            formattedEndDate,
-            priority,
-            productId
-        });
+        await db.promise().query(insertBannerQuery, [newId, req.file.filename, link, formattedEndDate, priority, productId]);
 
         res.status(201).json({ success: true, message: "Banner inserted successfully" });
     } catch (err) {
@@ -70,7 +63,7 @@ const deleteBanner = async (req, res) => {
     try {
         const bannerId = req.params.bannerId;
 
-        const imageNameResult = await db.query("SELECT ImageName FROM banners WHERE BannerID = @bannerId", { bannerId });
+        const [imageNameResult] = await db.promise().query("SELECT ImageName FROM banners WHERE BannerID = ?", [bannerId]);
 
         if (imageNameResult.length === 0) {
             return res.status(404).json({ success: false, error: "Banner not found" });
@@ -78,7 +71,7 @@ const deleteBanner = async (req, res) => {
 
         const imageName = imageNameResult[0].ImageName;
 
-        await db.query("DELETE FROM banners WHERE BannerID = @bannerId", { bannerId });
+        await db.promise().query("DELETE FROM banners WHERE BannerID = ?", [bannerId]);
 
         const imagePath = path.join(__dirname, "../public/assets/", imageName);
         fs.unlink(imagePath, (err) => {

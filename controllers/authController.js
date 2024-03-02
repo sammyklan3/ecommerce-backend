@@ -17,20 +17,16 @@ const signup = async (req, res) => {
     try {
         const hashedPassword = await bcrypt.hash(password, 10); // Using 10 salt rounds
 
-        const existingUser = await db.query("SELECT * FROM users WHERE Username = @username", { username });
+        const [existingUser] = await db.promise().query("SELECT * FROM users WHERE Username = ?", [username]);
 
         if (existingUser.length > 0) {
             return res.status(400).json({ success: false, error: "This user already exists" });
         }
 
         const newId = generateRandomAlphanumericId(9); // Assuming you have a function to generate random IDs
-        const sqlQuery = "INSERT INTO users (UserID, Username, Password, date_created) VALUES (@newId, @username, @password, GETDATE())";
+        const sqlQuery = "INSERT INTO users (UserID, Username, Password, date_created) VALUES (?, ?, ?, NOW())";
 
-        await db.query(sqlQuery, {
-            newId,
-            username,
-            password: hashedPassword,
-        });
+        await db.promise().query(sqlQuery, [newId, username, hashedPassword]);
 
         res.status(200).json({ success: true, message: "Account successfully created" });
     } catch (error) {
@@ -48,7 +44,7 @@ const login = async (req, res) => {
     }
 
     try {
-        const user = await db.query("SELECT * FROM users WHERE Username = @username", { username });
+        const [user] = await db.promise().query("SELECT * FROM users WHERE Username = ?", [username]);
 
         if (user.length === 0) {
             return res.status(400).json({ success: false, error: "Username or Password is incorrect" });

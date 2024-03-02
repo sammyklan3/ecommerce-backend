@@ -1,52 +1,25 @@
 require('dotenv').config();
 
-const sql = require("mssql");
+const mysql = require("mysql2");
 
-const server = process.env.AZURE_SQL_SERVER;
-const database = process.env.AZURE_SQL_DATABASE;
-const port = parseInt(process.env.AZURE_SQL_PORT);
-const user = process.env.AZURE_SQL_USER;
-const password = process.env.AZURE_SQL_PASSWORD;
+const db = mysql.createPool({
+  host: process.env.MYSQL_HOST,
+  user: process.env.MYSQL_USER,
+  password: process.env.MYSQL_PASSWORD,
+  database: process.env.MYSQL_DATABASE,
+  port: process.env.MYSQL_PORT,
+  waitForConnections: true,
+  connectionLimit: 10, // Adjust the number of connections based on your requirements
+  queueLimit: 0
+});
 
-const config = {
-  server,
-  port,
-  database,
-  user,
-  password,
-  authentication: {
-    type: 'default'
-  },
-
-  options: {
-    encrypt: true
+// Listen for the 'connection' event to log when the database is connected
+db.getConnection((err, connection) => {
+  if (err) {
+    console.error('Database connection failed: ', err.message);
+  } else {
+    console.log('Database connection successful!');
+    connection.release(); // Release the connection when done
   }
-};
-
-const poolPromise = new sql.ConnectionPool(config)
-  .connect()
-  .then(pool => {
-    console.log('Connected to MSSQL');
-    return pool;
-  })
-  .catch(err => console.log('Database Connection Failed! Bad Config: ', err));
-
-const query = async (queryString, params) => {
-  try {
-    const pool = await poolPromise;
-    const request = pool.request();
-
-    if (params) {
-      for (const key in params) {
-        request.input(key, params[key]);
-      }
-    }
-
-    const result = await request.query(queryString);
-    return result.recordset;
-  } catch (err) {
-    throw new Error(`Error executing query: ${err}`);
-  }
-};
-
-module.exports = { query };
+});
+module.exports = db;
