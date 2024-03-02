@@ -69,7 +69,7 @@ const createProduct = async (req, res) => {
     } catch (error) {
         // Handle errors
         console.error('Error adding product:', error);
-        res.status(500).json({ error: 'Internal server error' });
+        res.status(500).json({ error: 'Internal Server Error' });
     }
 };
 
@@ -135,7 +135,7 @@ const getProducts = async (req, res) => {
         }
 
         // Get the host address dynamically
-        const host = req.get('host');
+        const host = req.get("host");
         const protocol = req.protocol;
 
         // Add the protocol and host to each image URL
