@@ -32,6 +32,11 @@ app.use(compression({
   }));
 
 app.use(cors());
+
+// Parse application/x-www-form-urlencoded
+app.use(bodyParser.urlencoded({ extended: false }));
+
+// Parse application/json
 app.use(bodyParser.json());
 
 // Serve static files from the '/public/assets' directory
