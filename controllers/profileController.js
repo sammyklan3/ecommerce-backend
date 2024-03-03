@@ -16,8 +16,14 @@ const getUserProfile = async (req, res) => {
 
         db.query(getUserProfiledb, [userId], (err, result) => {
             if (err) {
+
                 console.log(err);
                 res.status(500).json({ error: "Internal server error" });
+
+            } else if (!result || result.length === 0) {
+
+                res.status(404).json({ error: "User not found" });
+                
             } else {
 
                 const host = req.get("host");

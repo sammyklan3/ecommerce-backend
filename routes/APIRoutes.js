@@ -27,9 +27,9 @@ router.get("/products", getProducts);
 router.delete("/product/:productId", deleteProduct);
 
 // Profile routes
-router.get("/profile/:userId", getUserProfile);
-router.put("/profile/:userId", updateUserProfile);
-router.delete("/profile/:userId", deleteUserAccount);
+router.get("/profile/:userId", verifyToken, getUserProfile);
+router.put("/profile/:userId", verifyToken, updateUserProfile);
+router.delete("/profile/:userId", verifyToken, deleteUserAccount);
 
 // Banners routes
 router.get("/banners", getBanners);
