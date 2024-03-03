@@ -112,6 +112,7 @@ dist
 
 # Serverless directories
 .serverless/
+.github
 
 # FuseBox cache
 .fusebox/
