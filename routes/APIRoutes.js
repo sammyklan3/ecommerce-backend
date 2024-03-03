@@ -4,7 +4,7 @@ const upload = require("../modules/upload");
 const { verifyToken } = require("../modules/middleware");
 
 const { signup, login} = require("../controllers/authController");
-const { getUserProfile, updateUserProfile, deleteUserAccount } = require("../controllers/profileController");
+const { getUserDetails ,getUserProfile, updateUserProfile, deleteUserAccount } = require("../controllers/profileController");
 const home = require("../controllers/homeController");
 const { getOrders } = require("../controllers/ordersController");
 const { insertBanner, getBanners, deleteBanner } = require("../controllers/bannerController");
@@ -30,6 +30,9 @@ router.delete("/product/:productId", deleteProduct);
 router.get("/profile/:userId", verifyToken, getUserProfile);
 router.put("/profile/:userId", verifyToken, updateUserProfile);
 router.delete("/profile/:userId", verifyToken, deleteUserAccount);
+
+// Current user details
+router.get("/currentUser", verifyToken, getUserDetails);
 
 // Banners routes
 router.get("/banners", getBanners);

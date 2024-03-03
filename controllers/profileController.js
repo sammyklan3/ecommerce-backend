@@ -1,6 +1,25 @@
 const db = require("../modules/db");
 const fs = require("fs");
 
+// Route to get the UserId and username of the currently logged in user
+const getUserDetails = async (req, res) => {
+
+    try {
+        const getUserDetailsquery = "SELECT UserID FROM users WHERE Username = ?";
+
+        db.query(getUserDetailsquery, [req.user.username], (err, result) => {
+            if (err) {
+                console.log(err);
+                res.status(500).json({ error: "Internal server error" });
+            } else {
+                res.status(200).json({ username: req.user.username, userId: result[0].UserID });
+            }
+        });
+    } catch (error) {
+        res.status(500).json({ error: "Internal server error" });
+    }
+};
+
 const getUserProfile = async (req, res) => {
 
     if (!req.params.userId) {
@@ -23,7 +42,7 @@ const getUserProfile = async (req, res) => {
             } else if (!result || result.length === 0) {
 
                 res.status(404).json({ error: "User not found" });
-                
+
             } else {
 
                 const host = req.get("host");
@@ -140,4 +159,4 @@ const deleteUserAccount = async (req, res) => {
     }
 };
 
-module.exports = { getUserProfile, updateUserProfile, deleteUserAccount };
+module.exports = { getUserDetails ,getUserProfile, updateUserProfile, deleteUserAccount };
