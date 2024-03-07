@@ -9,6 +9,9 @@ const bodyParser = require("body-parser");
 
 const app = express();
 
+// Parse application/json
+app.use(bodyParser.json());
+
 app.use((req, res, next) => {
     console.log(`Request received at ${new Date()}`);
     next();
@@ -21,23 +24,17 @@ app.use(compression({
     memLevel: 8,      // Memory level (1-9) to balance memory usage and compression speed (default is 8)
     chunkSize: 16384, // Chunk size (16KB by default), controls the size of internal buffering
     filter: (req, res) => {
-      if (req.headers['x-no-compression']) {
-        // Don't compress responses if requested by the client
-        return false;
-      }
-  
-      // Compress all other responses
-      return compression.filter(req, res);
+        if (req.headers['x-no-compression']) {
+            // Don't compress responses if requested by the client
+            return false;
+        }
+
+        // Compress all other responses
+        return compression.filter(req, res);
     }
-  }));
+}));
 
 app.use(cors());
-
-// Parse application/x-www-form-urlencoded
-app.use(bodyParser.urlencoded({ extended: false }));
-
-// Parse application/json
-app.use(bodyParser.json());
 
 // Serve static files from the '/public/assets' directory
 app.use('/public/', express.static(path.join(__dirname, '../public/')));

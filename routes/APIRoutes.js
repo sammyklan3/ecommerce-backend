@@ -21,14 +21,14 @@ router.post("/login", login);
 router.get("/orders", getOrders);
 
 // Products routes
-router.post("/createProducts", upload.array("images", 5), createProduct);
+router.post("/createProducts", verifyToken, upload.array("images", 5), createProduct);
 router.get("/product/:ProductID", getProduct);
 router.get("/products", getProducts);
-router.delete("/product/:productId", deleteProduct);
+router.delete("/product/:productId", verifyToken ,deleteProduct);
 
 // Profile routes
 router.get("/profile/:userId", verifyToken, getUserProfile);
-router.put("/profile/:userId", verifyToken, updateUserProfile);
+router.patch("/profile/:userId", verifyToken, updateUserProfile);
 router.delete("/profile/:userId", verifyToken, deleteUserAccount);
 
 // Current user details
@@ -36,7 +36,7 @@ router.get("/currentUser", verifyToken, getUserDetails);
 
 // Banners routes
 router.get("/banners", getBanners);
-router.post("/banners", upload.single("image"), insertBanner);
-router.delete("/banners/:bannerId", deleteBanner);
+router.post("/banners", verifyToken, upload.single("image"), insertBanner);
+router.delete("/banners/:bannerId", verifyToken, deleteBanner);
 
 module.exports = router;

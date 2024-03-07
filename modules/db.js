@@ -22,4 +22,4 @@ db.getConnection((err, connection) => {
     connection.release(); // Release the connection when done
   }
 });
-module.exports = db;
+module.exports = db.promise();

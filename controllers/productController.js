@@ -1,11 +1,10 @@
 const db = require('../modules/db');
 const path = require('path');
-const fs = require("fs");
+const fs = require("fs").promises;
 
 const { generateRandomAlphanumericId } = require("../modules/middleware");
 
 const createProduct = async (req, res) => {
-
     // Product creation logic
     const newId = generateRandomAlphanumericId(9);
 
@@ -13,100 +12,40 @@ const createProduct = async (req, res) => {
         // Parse incoming request body for product data
         const { name, description, price, category, stockquantity, model, manufacturer } = req.body;
 
-        if (!name) {
-            return res.status(400).json({ success: false, error: "Name cannot be empty" });
-        } else if (!description) {
-            return res.status(400).json({ success: false, error: "Description cannot be empty" });
-        } else if (!price) {
-            return res.status(400).json({ success: false, error: "Price cannot be empty" });
-        } else if (!category) {
-            return res.status(400).json({ success: false, error: "Category cannot be empty" });
-        } else if (!stockquantity) {
-            return res.status(400).json({ success: false, error: "Stock quantity cannot be empty" });
-        } else if (!model) {
-            return res.status(400).json({ success: false, error: "Model cannot be empty" });
-        } else if (!manufacturer) {
-            return res.status(400).json({ success: false, error: "Manufacturer cannot be empty" });
-        } else {
-
-            // Check if the product already exists in the database
-            const productExistsQuery = `SELECT COUNT(*) AS count FROM products WHERE Name = ?`;
-            db.query(productExistsQuery, [name], (err, result) => {
-                if (err) {
-                    console.error("Database error:", err);
-                    return res.status(500).json({ success: false, error: "Internal Server Error" });
-                }
-
-                const productCount = result[0].count;
-                if (productCount > 0) {
-                    // Product already exists, return error response
-                    return res.status(400).json({ success: false, error: "Product already exists" });
-                }
-
-                // Get current date and time
-                const currentDate = new Date();
-                // Format date and time as per your database requirements
-                const formattedDate = currentDate.toISOString().slice(0, 19).replace('T', ' ');
-
-                // Insert product data into products table
-                const productInsertQuery = `
-                INSERT INTO products (ProductID, Name, Description, Price, Category, StockQuantity, Model, Manufacturer, date_uploaded)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-            `;
-
-                if (!req.files) {
-                    return res.status(400).json({ success: false, error: "Images not provided" });
-                } else if (req.files.length < 5) {
-                    return res.status(400).json({ success: false, error: "Minimum 5 images required" });
-                } else {
-                    // Inserting product details in the database
-                    db.query(productInsertQuery, [newId, name, description, price, category, stockquantity, model, manufacturer, formattedDate], (err, productResult) => {
-                        if (err) {
-                            console.error("Database error:", err);
-                            return res.status(500).json({ success: false, error: "Internal Server Error" });
-                        }
-
-                        // Retrieve auto generated id
-                        const productId = newId;
-
-                        const imageNames = req.files.map(file => file.filename);
-
-                        // Insert image names into the database
-                        const imageInsertQuery = `INSERT INTO product_images (ProductID, URL) VALUES (?, ?)`;
-
-                        // Use a loop or Promise.all to ensure all image insertions are completed before sending response
-                        const insertPromises = imageNames.map(imageName => {
-                            return new Promise((resolve, reject) => {
-                                db.query(imageInsertQuery, [productId, imageName], (err, imageResult) => {
-                                    if (err) {
-                                        console.error("Database error:", err);
-                                        reject(err);
-                                    } else {
-                                        resolve();
-                                    }
-                                });
-                            });
-                        });
-
-                        Promise.all(insertPromises)
-                            .then(() => {
-                                console.log('Product and images uploaded successfully.');
-                                res.status(200).send('Product and images uploaded successfully.');
-                            })
-                            .catch(error => {
-                                console.error("Error inserting image data:", error);
-                                res.status(500).json({ success: false, error: "Internal Server Error" });
-                            });
-                    });
-                };
-            });
+        if (!name || !description || !price || !category || !stockquantity || !model || !manufacturer) {
+            return res.status(400).json({ success: false, error: "All fields are required" });
         }
+
+        // Check if the product already exists in the database
+        const productExistsQuery = `SELECT COUNT(*) AS count FROM products WHERE Name = ?`;
+        const [productCountRow] = await db.promise().query(productExistsQuery, [name]);
+        const productCount = productCountRow[0].count;
+
+        if (productCount > 0) {
+            // Product already exists, return error response
+            return res.status(400).json({ success: false, error: "Product already exists" });
+        }
+
+        // Get current date and time
+        const currentDate = new Date();
+        // Format date and time as per your database requirements
+        const formattedDate = currentDate.toISOString().slice(0, 19).replace('T', ' ');
+
+        // Insert product data into products table
+        const productInsertQuery = `
+            INSERT INTO products (ProductID, Name, Description, Price, Category, StockQuantity, Model, Manufacturer, date_uploaded)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `;
+        await db.promise().query(productInsertQuery, [newId, name, description, price, category, stockquantity, model, manufacturer, formattedDate]);
+
+    
+        
+        
     } catch (error) {
         // Handle errors
         console.error('Error adding product:', error);
         res.status(500).json({ error: 'Internal server error' });
     }
-
 };
 
 const getProduct = async (req, res) => {
@@ -118,15 +57,9 @@ const getProduct = async (req, res) => {
         return res.status(400).json({ success: false, error: "Product ID not provided" });
     }
 
-    const getProductQuery = "SELECT * FROM products WHERE ProductID = ?";
-    const getProductImagesQuery = "SELECT URL FROM product_images WHERE ProductID = ?";
-    const getReviews = "SELECT reviews.*, users.username, users.profile_image FROM reviews INNER JOIN users ON reviews.UserID = users.UserID WHERE reviews.ProductID = ?";
-
-    db.query(getProductQuery, [productID], (err, productResult) => {
-        if (err) {
-            console.error("Database error:", err);
-            return res.status(500).json({ success: false, error: "Internal Server Error" });
-        }
+    try {
+        const getProductQuery = "SELECT * FROM products WHERE ProductID = ?";
+        const [productResult] = await db.query(getProductQuery, [productID]);
 
         if (productResult.length < 1) {
             return res.status(404).json({ success: false, error: "Product not found" });
@@ -134,44 +67,32 @@ const getProduct = async (req, res) => {
 
         const product = productResult[0];
 
-        db.query(getProductImagesQuery, [productID], (err, imagesResult) => {
-            if (err) {
-                console.error("Database error:", err);
-                return res.status(500).json({ success: false, error: "Internal Server Error" });
-            }
+        const getProductImagesQuery = "SELECT URL FROM product_images WHERE ProductID = ?";
+        const [imagesResult] = await db.query(getProductImagesQuery, [productID]);
 
-            const host = req.get('host');
-            const protocol = req.protocol;
+        const host = req.get('host');
+        const protocol = req.protocol;
 
-            // Construct full image URLs
-            const images = imagesResult.map(image => `${protocol}://${host}/public/assets/${image.URL}`);
+        // Construct full image URLs
+        const images = imagesResult.map(image => `${protocol}://${host}/public/assets/${image.URL}`);
 
+        const getReviews = "SELECT reviews.*, users.username, users.profile_image FROM reviews INNER JOIN users ON reviews.UserID = users.UserID WHERE reviews.ProductID = ?";
+        const [results] = await db.query(getReviews, [productID]);
 
-            db.query(getReviews, [productID], (err, results) => {
-                if (err) {
-                    console.error("Database error:", err);
-                    return res.status(500).json({ success: false, error: "Internal Server Error" });
-                } else {
-                    const review = results.map((review) => { return review })
-
-                    results.forEach(reviewItem => {
-                        reviewItem.profile_image = `${protocol}://${host}/public/assets/${reviewItem.profile_image}`;
-                    });
-
-                    // Combine product details with image URLs
-                    const productWithImages = { ...product, Images: images, Reviews: review };
-
-                    res.status(200).json(productWithImages);
-                }
-            });
-
-
-
+        results.forEach(reviewItem => {
+            reviewItem.profile_image = `${protocol}://${host}/public/assets/${reviewItem.profile_image}`;
         });
-    });
+
+        // Combine product details with image URLs
+        const productWithImages = { ...product, Images: images, Reviews: results };
+
+        res.status(200).json(productWithImages);
+    } catch (error) {
+        console.error('Error fetching product:', error);
+        res.status(500).json({ error: 'Internal server error' });
+    }
 };
 
-// Get products controller
 const getProducts = async (req, res) => {
     // Get products logic
     const sql = `
@@ -184,17 +105,13 @@ const getProducts = async (req, res) => {
         ) pi ON p.ProductID = pi.ProductID
     `;
 
-    db.query(sql, (err, result) => {
-        if (err) {
-            // Handle db error
-            console.log("Database error: " + err);
-            res.status(500).json({ success: false, error: "Internal Server Error" });
-            return;
-        } else if (result.length === 0) {
+    try {
+        const [result] = await db.query(sql);
+
+        if (result.length === 0) {
             res.status(404).json({ success: false, error: "There are no products available" });
         } else {
-            // Get the host address dynamically
-            const host = req.get('host');
+            const host = req.get("host");
             const protocol = req.protocol;
 
             // Add the protocol and host to each image URL
@@ -204,77 +121,54 @@ const getProducts = async (req, res) => {
 
             res.status(200).json(result);
         }
-
-    });
+    } catch (error) {
+        // Handle db error
+        console.error("Database error:", error);
+        res.status(500).json({ success: false, error: "Internal Server Error" });
+    }
 };
 
-// Delete product controller
 const deleteProduct = async (req, res) => {
     try {
-        if (!req.params.productId) {
+        const productId = req.params.productId;
+
+        if (!productId) {
             res.status(404).json({ success: false, error: "No product Id has been provided" });
             return;
         }
         
-        const productId = req.params.productId;
-
         // Query to check if the product exists
         const getProductQuery = 'SELECT * FROM products WHERE ProductID = ?';
+        const [productResults] = await db.execute(getProductQuery, [productId]);
 
-        db.query(getProductQuery, [productId], (err, productResults) => {
-            if (err) {
-                console.error('Error checking product existence:', err);
-                res.status(500).json({ error: 'Internal Server Error' });
-                return;
-            } else if (productResults.length === 0) {
-                res.status(404).json({ success: false, error: "The product is not available." });
-                return;
-            }
+        if (productResults.length === 0) {
+            res.status(404).json({ success: false, error: "The product is not available." });
+            return;
+        }
 
-            // Query to fetch image URLs related to the product
-            const getImageUrlsQuery = 'SELECT URL FROM product_images WHERE ProductID = ?';
+        // Query to fetch image URLs related to the product
+        const getImageUrlsQuery = 'SELECT URL FROM product_images WHERE ProductID = ?';
+        const [imageResults] = await db.execute(getImageUrlsQuery, [productId]);
 
-            db.query(getImageUrlsQuery, [productId], (err, imageResults) => {
-                if (err) {
-                    console.error('Error fetching image URLs:', err);
-                    res.status(500).json({ error: 'Internal Server Error' });
-                    return;
-                }
+        // Extract image URLs from the query results
+        const imageUrls = imageResults.map(image => image.URL);
 
-                // Extract image URLs from the query results
-                const imageUrls = imageResults.map(image => image.URL);
+        // Query to delete product record from the database
+        const deleteProductQuery = 'DELETE FROM products WHERE ProductID = ?';
+        await db.exe(deleteProductQuery, [productId]);
 
-                // Query to delete product record from the database
-                const deleteProductQuery = 'DELETE FROM products WHERE ProductID = ?';
+        // Delete image files from the /assets/products/ folder
+        await Promise.all(imageUrls.map(async imageUrl => {
+            const imagePath = path.join(__dirname, "../public/assets/", imageUrl);
+            await fs.unlink(imagePath);
+            console.log('Image file deleted successfully:', imagePath);
+        }));
 
-                db.query(deleteProductQuery, [productId], (err, productDeleteResult) => {
-                    if (err) {
-                        console.error('Error deleting product:', err);
-                        res.status(500).json({ error: 'Internal Server Error' });
-                        return;
-                    }
-
-                    // Delete image files from the /assets/products/ folder
-                    imageUrls.forEach(imageUrl => {
-                        const imagePath = path.join(__dirname, "../public/assets/", imageUrl);
-                        fs.unlink(imagePath, (err) => {
-                            if (err) {
-                                console.error('Error deleting image file:', err);
-                            } else {
-                                console.log('Image file deleted successfully:', imagePath);
-                            }
-                        });
-                    });
-
-                    res.status(204).send(); // 204 No Content - successful deletion
-                });
-            });
-        });
+        res.status(204).send(); // 204 No Content - successful deletion
     } catch (error) {
         console.error('Error deleting product:', error);
         res.status(500).json({ error: 'Internal Server Error' });
     }
 };
-
 
 module.exports = { createProduct, getProduct, getProducts, deleteProduct };
